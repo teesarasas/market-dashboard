@@ -35,3 +35,20 @@ def test_natr_is_atr_percent_of_close():
     out = trend.compute(_ohlc(100 + 0.1 * np.arange(200)))
     last = out.iloc[-1]
     assert last["natr"] == last["atr"] / last["close"] * 100
+
+
+def test_adx_regime_hysteresis():
+    on, off = config.ADX_TREND_ON, config.ADX_TREND_OFF          # 30, 25
+    values = [off + 2, on + 1, on - 1, off + 0.5, off - 1]
+    regime = trend.adx_regime(pd.Series(values, dtype=float)).tolist()
+    assert regime[0] == "neutral"       # below 30: not yet trending
+    assert regime[1] == "trend"         # crossing 30 enters trend
+    assert regime[2] == "trend"         # back under 30 but above 25: stays
+    assert regime[3] == "trend"
+    assert regime[4] != "trend"         # below 25 exits
+
+
+def test_adx_regime_range_hysteresis():
+    on, off = config.ADX_RANGE_ON, config.ADX_RANGE_OFF          # 20, 23
+    regime = trend.adx_regime(pd.Series([on - 1, off - 0.5, off + 1], dtype=float)).tolist()
+    assert regime == ["range", "range", "neutral"]

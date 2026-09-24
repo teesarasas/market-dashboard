@@ -1,6 +1,6 @@
 # Market dashboard
 
-Trend filter across indices, FX majors, crosses, and metals on 10-minute bars:
+Trend filter across FX majors, crosses, and metals on 10-minute bars:
 price vs EMA120, ADX regime with hysteresis, and a strength score (ATRs from EMA).
 
 ## Run locally
@@ -40,10 +40,14 @@ To test the UI without spending API credits, set `DATA_PROVIDER = "demo"` in `co
 
 - `config.py` — symbols, thresholds, all settings
 - `data/providers/` — one file per data vendor
-- `data/fetch.py` — fetches, resamples 5m to 10m, caches for 10 minutes
-- `indicators/trend.py` — EMA, ADX/DI, ATR, regime, state (no Streamlit, reusable for backtests)
+- `data/fetch.py` — fetches, drops weekend filler bars, resamples 5m to 10m, caches for 10 minutes
+- `indicators/trend.py` — EMA, ADX/DI, ATR, NATR, regime, state, EMA lag (no Streamlit, reusable for backtests)
+- `indicators/daily.py` — FX trading day (17:00 New York rollover), ADR, previous-day range
+- `indicators/currency.py` — currency strength and breadth from FX pair scores
+- `indicators/metrics.py` — metrics available on the Market map axes
 - `indicators/snapshot.py` — latest values per symbol
-- `pages/` — Overview and Market map
+- `pages/` — Overview, Market map, Symbol, Currencies
+- `tests/` — run with `python -m pytest` (install `requirements-dev.txt` first)
 
 ## API usage
 
