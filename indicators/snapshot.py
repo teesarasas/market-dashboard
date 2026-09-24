@@ -2,7 +2,7 @@
 import pandas as pd
 
 import config
-from indicators import trend
+from indicators import daily, trend
 
 
 def build(bars: dict, symbol_map: dict, now: pd.Timestamp):
@@ -11,7 +11,7 @@ def build(bars: dict, symbol_map: dict, now: pd.Timestamp):
     for name, df in bars.items():
         if len(df) <= config.EMA_LENGTH:
             continue
-        ind = trend.compute(df)
+        ind = daily.compute(trend.compute(df))
         history[name] = ind
         last = ind.iloc[-1]
         # The last 10m bar is still forming; its label is its start time
@@ -28,6 +28,11 @@ def build(bars: dict, symbol_map: dict, now: pd.Timestamp):
                 "-DI": last["minus_di"],
                 "State": last["state"],
                 "Score": last["score"],
+                "NATR": last["natr"],
+                "ADR used %": last["adr_used"],
+                "Prev-day zone": last["prev_day_zone"],
+                "Prev-day pos %": last["prev_day_pos"],
+                "EMA lag": bool(last["ema_lag"]),
                 "Last bar (UTC)": ind.index[-1],
                 "Stale": age_min > config.STALE_AFTER_MINUTES,
             }

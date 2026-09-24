@@ -5,10 +5,12 @@ import config
 from data.fetch import load_all, symbol_map
 from indicators import snapshot, trend
 
+AMBER = "#e59f2d"
+
 STATE_COLORS = {
     trend.TREND_UP: "#1a9e77",
     trend.TREND_DOWN: "#d1495b",
-    trend.CONFLICT: "#e59f2d",
+    trend.CONFLICT: AMBER,
     trend.RANGE: "#6c8ebf",
     trend.NEUTRAL: "#a0a4ab",
 }

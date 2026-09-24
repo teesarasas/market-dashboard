@@ -56,5 +56,13 @@ ADX_TREND_OFF = 25   # leave trend state below this
 ADX_RANGE_ON = 20    # enter range state below this
 ADX_RANGE_OFF = 23   # leave range state above this
 
+# EMA lag flag: price crossed the EMA but the EMA still slopes the other way
+SLOPE_BARS = 10        # EMA slope measured over this many bars
+SLOPE_MIN_ATR = 0.1    # ignore slopes flatter than this (in ATRs)
+
+# --- Daily metrics ---
+ADR_DAYS = 14          # average daily range over this many complete trading days
+ADR_USED_WARN = 90     # ADR used % at or above this is highlighted (little room left)
+
 # --- Market Map ---
 TRAIL_BARS = 12      # 12 x 10m = last 2 hours

@@ -68,7 +68,15 @@ def compute(df: pd.DataFrame) -> pd.DataFrame:
     out["atr"] = wilder(true_range(out), config.ATR_LENGTH)
     out["adx"], out["plus_di"], out["minus_di"] = adx(out, config.ADX_LENGTH)
     out["score"] = (out["close"] - out["ema"]) / out["atr"]
+    out["natr"] = out["atr"] / out["close"] * 100
     out["regime"] = adx_regime(out["adx"])
+
+    # EMA lag: price has crossed the EMA but the EMA still slopes the other way
+    out["ema_slope_atr"] = (out["ema"] - out["ema"].shift(config.SLOPE_BARS)) / out["atr"]
+    out["ema_lag"] = (
+        (np.sign(out["close"] - out["ema"]) != np.sign(out["ema_slope_atr"]))
+        & (out["ema_slope_atr"].abs() > config.SLOPE_MIN_ATR)
+    )
 
     above = out["close"] > out["ema"]
     di_up = out["plus_di"] > out["minus_di"]
@@ -86,5 +94,7 @@ def compute(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     # EMA needs warm-up before it means anything
-    out.loc[out.index[: config.EMA_LENGTH], ["score", "state"]] = [np.nan, NEUTRAL]
+    out.loc[out.index[: config.EMA_LENGTH], ["score", "state", "ema_slope_atr", "ema_lag"]] = [
+        np.nan, NEUTRAL, np.nan, False
+    ]
     return out

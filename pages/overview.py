@@ -32,6 +32,7 @@ def style(df):
     show["Symbol"] = [
         f"{s}  (stale)" if stale else s for s, stale in zip(df["Symbol"], df["Stale"])
     ]
+    show["EMA lag"] = ["lag" if v else "" for v in df["EMA lag"]]
     return (
         show.style
         .map(
@@ -42,6 +43,10 @@ def style(df):
             lambda v: "color: #1a9e77" if v > 0 else "color: #d1495b",
             subset=["Score"],
         )
+        .map(
+            lambda v: f"color: {ui.AMBER}; font-weight: 600" if v >= config.ADR_USED_WARN else "",
+            subset=["ADR used %"],
+        )
         .format(
             {
                 "Price": "{:,.5g}",
@@ -49,8 +54,12 @@ def style(df):
                 "+DI": "{:.1f}",
                 "-DI": "{:.1f}",
                 "Score": "{:+.2f}",
+                "NATR": "{:.3f}%",
+                "ADR used %": "{:.0f}%",
+                "Prev-day pos %": "{:.0f}%",
                 "Last bar (UTC)": lambda t: t.strftime("%a %H:%M"),
-            }
+            },
+            na_rep="–",
         )
     )
 
@@ -68,5 +77,8 @@ else:
 st.caption(
     f"Trend: ADX above {config.ADX_TREND_ON} (stays until below {config.ADX_TREND_OFF}). "
     f"Range: ADX below {config.ADX_RANGE_ON} (stays until above {config.ADX_RANGE_OFF}). "
-    "Conflict: ADX trending but EMA side and DI direction disagree. Stale: market closed or no recent bars."
+    "Conflict: ADX trending but EMA side and DI direction disagree. Stale: market closed or no recent bars.  \n"
+    f"NATR: ATR as % of price. ADR used: today's range vs the {config.ADR_DAYS}-day average "
+    f"(amber at {config.ADR_USED_WARN}%+). Prev-day pos: 0% = previous day's low, 100% = its high. "
+    f"EMA lag: price crossed EMA{config.EMA_LENGTH} but the EMA still slopes the other way."
 )
