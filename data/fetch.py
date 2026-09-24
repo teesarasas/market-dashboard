@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 
 import config
 from data.providers import demo_provider, twelvedata_provider
+from indicators.daily import is_weekend
 
 load_dotenv()
 
@@ -31,6 +32,11 @@ def resample(df: pd.DataFrame, rule: str) -> pd.DataFrame:
         {"open": "first", "high": "max", "low": "min", "close": "last"}
     )
     return out.dropna()
+
+
+def drop_weekend(df: pd.DataFrame) -> pd.DataFrame:
+    """Removes the vendor's flat filler bars between the Friday and Sunday rollovers."""
+    return df[~is_weekend(df.index).to_numpy()]
 
 
 def symbol_map():
@@ -61,8 +67,9 @@ def load_all(provider_name: str):
         config.SOURCE_INTERVAL,
         config.OUTPUTSIZE,
         config.BATCH_SIZE,
+        config.SOURCE_PAGES,
     )
 
-    bars = {vendor_to_display[v]: resample(df, config.TIMEFRAME) for v, df in raw.items()}
+    bars = {vendor_to_display[v]: resample(drop_weekend(df), config.TIMEFRAME) for v, df in raw.items()}
     errors = {vendor_to_display[v]: msg for v, msg in raw_errors.items()}
     return bars, errors, pd.Timestamp.now(tz="UTC")

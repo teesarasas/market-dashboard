@@ -34,10 +34,16 @@ SYMBOLS = {
 # --- Data ---
 SOURCE_INTERVAL = "5min"     # Twelve Data has no 10min; we resample
 TIMEFRAME = "10min"          # the timeframe all indicators run on
-OUTPUTSIZE = 1200            # 5m bars per symbol (~100h) — enough EMA warm-up
+OUTPUTSIZE = 5000            # 5m bars per request (Twelve Data max)
+SOURCE_PAGES = 2             # requests per symbol, walking back in time (~26 FX days)
+                             # Twelve Data fills weekends with flat bars; those are dropped
 CACHE_TTL_SECONDS = 600      # refetch at most every 10 minutes
-BATCH_SIZE = 8               # symbols per API request (1 credit each)
+BATCH_SIZE = 8               # symbols per API request (1 credit each, per page)
 STALE_AFTER_MINUTES = 30     # flag a symbol if its last bar is older than this
+
+# FX trading day rolls over at 17:00 New York time (DST handled by the tz)
+DAY_ROLLOVER_TZ = "America/New_York"
+DAY_ROLLOVER_HOUR = 17
 
 # --- Indicators ---
 EMA_LENGTH = 120

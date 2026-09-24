@@ -47,5 +47,6 @@ To test the UI without spending API credits, set `DATA_PROVIDER = "demo"` in `co
 
 ## API usage
 
-Each refresh costs one credit per symbol (20 by default). Data is cached for 10 minutes,
+Each refresh costs `SOURCE_PAGES` credits per symbol (2 x 15 = 30 by default; two pages of
+5m bars give ~26 FX trading days for the daily metrics). Data is cached for 10 minutes,
 so reloading the page doesn't spend credits. "Refresh data" forces a new fetch.
