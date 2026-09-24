@@ -64,5 +64,8 @@ SLOPE_MIN_ATR = 0.1    # ignore slopes flatter than this (in ATRs)
 ADR_DAYS = 14          # average daily range over this many complete trading days
 ADR_USED_WARN = 90     # ADR used % at or above this is highlighted (little room left)
 
+# --- Symbol page ---
+DETAIL_BARS = 300    # bars shown on the detail chart
+
 # --- Market Map ---
 TRAIL_BARS = 12      # 12 x 10m = last 2 hours

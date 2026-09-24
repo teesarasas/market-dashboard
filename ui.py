@@ -17,6 +17,13 @@ STATE_COLORS = {
 STATE_ORDER = [trend.TREND_UP, trend.TREND_DOWN, trend.CONFLICT, trend.RANGE, trend.NEUTRAL]
 
 
+def open_symbol(name: str):
+    """Remembers the chosen symbol and offers a jump to its detail page."""
+    st.session_state["symbol"] = name
+    if st.button(f"Open {name} chart", type="primary"):
+        st.switch_page("pages/symbol.py")
+
+
 def load():
     """Returns history, snapshot, errors, fetched_at, and the selected groups."""
     with st.sidebar:

@@ -30,6 +30,7 @@ for x, dash in [(config.ADX_RANGE_ON, "solid"), (config.ADX_TREND_OFF, "dot"), (
 fig.add_hline(y=0, line_width=1, line_color="#888")
 
 legend_done = set()
+marker_names = {}   # trace index -> symbol, for click selection
 max_x, max_y = config.ADX_TREND_ON + 10, 1.0
 
 for _, row in snap.iterrows():
@@ -52,6 +53,7 @@ for _, row in snap.iterrows():
             )
         )
 
+    marker_names[len(fig.data)] = name
     fig.add_trace(
         go.Scatter(
             x=[row["ADX"]], y=[row["Score"]], mode="markers+text",
@@ -78,6 +80,12 @@ fig.update_layout(
     legend=dict(orientation="h", yanchor="bottom", y=1.01, x=0),
     plot_bgcolor="rgba(0,0,0,0)",
 )
-st.plotly_chart(fig, width="stretch")
+event = st.plotly_chart(fig, width="stretch", key="market_map", on_select="rerun", selection_mode="points")
+
+clicked = [marker_names[p["curve_number"]] for p in event.selection.points if p["curve_number"] in marker_names]
+if clicked:
+    ui.open_symbol(clicked[0])
+else:
+    st.caption("Click a dot to open its chart.")
 
 st.caption("Diamond markers are stale (market closed or no recent bars).")

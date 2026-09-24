@@ -64,15 +64,32 @@ def style(df):
     )
 
 
+def table(df, key, **kwargs):
+    """Row-selectable table; returns the selected symbol or None."""
+    event = st.dataframe(
+        style(df), hide_index=True, width="stretch", key=key,
+        on_select="rerun", selection_mode="single-row", **kwargs,
+    )
+    rows = event.selection.rows
+    return df["Symbol"].iloc[rows[0]] if rows else None
+
+
+picked = []
 if split:
     for g in groups:
         part = snap[snap["Group"] == g]
         if part.empty:
             continue
         st.subheader(g)
-        st.dataframe(style(part.drop(columns=["Group"])), hide_index=True, width="stretch")
+        picked.append(table(part.drop(columns=["Group"]), key=f"table_{g}"))
 else:
-    st.dataframe(style(snap), hide_index=True, width="stretch", height=38 * (len(snap) + 1))
+    picked.append(table(snap, key="table_all", height=38 * (len(snap) + 1)))
+
+selected = next((p for p in picked if p), None)
+if selected:
+    ui.open_symbol(selected)
+else:
+    st.caption("Select a row to open its chart.")
 
 st.caption(
     f"Trend: ADX above {config.ADX_TREND_ON} (stays until below {config.ADX_TREND_OFF}). "
