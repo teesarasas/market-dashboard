@@ -67,5 +67,11 @@ ADR_USED_WARN = 90     # ADR used % at or above this is highlighted (little room
 # --- Symbol page ---
 DETAIL_BARS = 300    # bars shown on the detail chart
 
+# --- Currencies ---
+CURRENCY_GROUPS = ["FX majors", "FX crosses"]   # groups used for strength (no metals)
+CURRENCY_MIN_PAIR_SHARE = 0.8   # drop bars where fewer than this share of pairs have a score
+CURRENCY_HISTORY_BARS = 144     # 144 x 10m = 24h on the strength chart
+CURRENCY_MIN_COVERAGE = 3       # warn when a currency appears in fewer pairs than this
+
 # --- Market Map ---
 TRAIL_BARS = 12      # 12 x 10m = last 2 hours

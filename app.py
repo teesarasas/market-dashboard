@@ -7,6 +7,7 @@ nav = st.navigation(
         st.Page("pages/overview.py", title="Overview", default=True),
         st.Page("pages/market_map.py", title="Market map"),
         st.Page("pages/symbol.py", title="Symbol"),
+        st.Page("pages/currency.py", title="Currencies"),
     ]
 )
 nav.run()
