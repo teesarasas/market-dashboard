@@ -8,7 +8,7 @@ DATA_PROVIDER = "twelvedata"
 # Run `python check_symbols.py` to confirm every symbol works on your plan.
 # If an index fails, try the alternatives noted beside it.
 SYMBOLS = {
-        "FX majors": {
+    "FX majors": {
         "EURUSD": "EUR/USD",
         "GBPUSD": "GBP/USD",
         "USDJPY": "USD/JPY",
@@ -18,12 +18,32 @@ SYMBOLS = {
         "NZDUSD": "NZD/USD",
     },
     "FX crosses": {
-        "EURJPY": "EUR/JPY",
-        "GBPJPY": "GBP/JPY",
+        # EUR
         "EURGBP": "EUR/GBP",
-        "AUDJPY": "AUD/JPY",
+        "EURJPY": "EUR/JPY",
         "EURAUD": "EUR/AUD",
+        "EURNZD": "EUR/NZD",
+        "EURCAD": "EUR/CAD",
+        "EURCHF": "EUR/CHF",
+        # GBP
+        "GBPJPY": "GBP/JPY",
         "GBPAUD": "GBP/AUD",
+        "GBPNZD": "GBP/NZD",
+        "GBPCAD": "GBP/CAD",
+        "GBPCHF": "GBP/CHF",
+        # AUD
+        "AUDJPY": "AUD/JPY",
+        "AUDNZD": "AUD/NZD",
+        "AUDCAD": "AUD/CAD",
+        "AUDCHF": "AUD/CHF",
+        # NZD
+        "NZDJPY": "NZD/JPY",
+        "NZDCAD": "NZD/CAD",
+        "NZDCHF": "NZD/CHF",
+        # CAD and CHF
+        "CADJPY": "CAD/JPY",
+        "CADCHF": "CAD/CHF",
+        "CHFJPY": "CHF/JPY",
     },
     "Metals": {
         "XAUUSD": "XAU/USD",
