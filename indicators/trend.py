@@ -6,7 +6,7 @@ import config
 
 TREND_UP = "Trend up"
 TREND_DOWN = "Trend down"
-CONFLICT = "Conflict"      # ADX says trend, but EMA side and DI disagree
+CONFLICT = "Conflict"      # ADX says trend, but EMA side and DI spread do not clearly agree
 RANGE = "Range"
 NEUTRAL = "Neutral"        # between thresholds: do nothing
 
@@ -40,6 +40,18 @@ def adx(df: pd.DataFrame, length: int):
     return wilder(dx, length), plus_di, minus_di
 
 
+def di_spread(plus_di: pd.Series, minus_di: pd.Series) -> pd.Series:
+    """Signed DX: 100 x (+DI - -DI) / (+DI + -DI), from -100 (all down) to +100 (all up)."""
+    return 100 * (plus_di - minus_di) / (plus_di + minus_di).replace(0, np.nan)
+
+
+def di_direction(plus_di: pd.Series, minus_di: pd.Series, spread: pd.Series, spread_min: float):
+    """(clearly up, clearly down). With spread_min = 0 this is exactly the old +DI > -DI rule."""
+    up = (plus_di > minus_di) & (spread >= spread_min)
+    down = ~(plus_di > minus_di) & ~(spread > -spread_min)
+    return up, down
+
+
 def adx_regime(adx_values: pd.Series) -> pd.Series:
     """'trend' / 'range' / 'neutral' with hysteresis."""
     regime, out = "neutral", []
@@ -67,6 +79,7 @@ def compute(df: pd.DataFrame) -> pd.DataFrame:
     out["ema"] = out["close"].ewm(span=config.EMA_LENGTH, adjust=False).mean()
     out["atr"] = wilder(true_range(out), config.ATR_LENGTH)
     out["adx"], out["plus_di"], out["minus_di"] = adx(out, config.ADX_LENGTH)
+    out["di_spread"] = di_spread(out["plus_di"], out["minus_di"])
     out["score"] = (out["close"] - out["ema"]) / out["atr"]
     out["natr"] = out["atr"] / out["close"] * 100
     out["regime"] = adx_regime(out["adx"])
@@ -79,13 +92,13 @@ def compute(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     above = out["close"] > out["ema"]
-    di_up = out["plus_di"] > out["minus_di"]
+    di_up, di_down = di_direction(out["plus_di"], out["minus_di"], out["di_spread"], config.DI_SPREAD_MIN)
     is_trend = out["regime"] == "trend"
 
     out["state"] = np.select(
         [
             is_trend & above & di_up,
-            is_trend & ~above & ~di_up,
+            is_trend & ~above & di_down,
             is_trend,
             out["regime"] == "range",
         ],

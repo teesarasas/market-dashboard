@@ -25,13 +25,14 @@ st.session_state["symbol"] = name
 ind = history[name]
 last = ind.iloc[-1]
 
-cols = st.columns([1.4, 1, 1, 1, 1.4, 1])
+cols = st.columns([1.4, 1, 1, 1, 1, 1.4, 1])
 cols[0].metric("State", last["state"])
 cols[1].metric("Score", f"{last['score']:+.2f}")
 cols[2].metric("ADX", f"{last['adx']:.1f}")
-cols[3].metric("ADR used", "–" if pd.isna(last["adr_used"]) else f"{last['adr_used']:.0f}%")
-cols[4].metric("Prev-day zone", last["prev_day_zone"] or "–")
-cols[5].metric("EMA lag", "lag" if last["ema_lag"] else "no")
+cols[3].metric("DI spread", "–" if pd.isna(last["di_spread"]) else f"{last['di_spread']:+.0f}")
+cols[4].metric("ADR used", "–" if pd.isna(last["adr_used"]) else f"{last['adr_used']:.0f}%")
+cols[5].metric("Prev-day zone", last["prev_day_zone"] or "–")
+cols[6].metric("EMA lag", "lag" if last["ema_lag"] else "no")
 
 view = ind.tail(config.DETAIL_BARS)
 

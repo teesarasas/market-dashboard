@@ -52,3 +52,39 @@ def test_adx_regime_range_hysteresis():
     on, off = config.ADX_RANGE_ON, config.ADX_RANGE_OFF          # 20, 23
     regime = trend.adx_regime(pd.Series([on - 1, off - 0.5, off + 1], dtype=float)).tolist()
     assert regime == ["range", "range", "neutral"]
+
+
+def test_di_spread_range_and_sign():
+    plus = pd.Series([30.0, 10.0, 20.0, 0.0])
+    minus = pd.Series([10.0, 30.0, 20.0, 0.0])
+    s = trend.di_spread(plus, minus)
+    assert s.iloc[0] == 50 and s.iloc[1] == -50 and s.iloc[2] == 0
+    assert np.isnan(s.iloc[3])          # no movement at all
+
+
+def test_di_direction_threshold():
+    plus = pd.Series([30.0, 22.0, 10.0, 18.0])
+    minus = pd.Series([10.0, 18.0, 30.0, 22.0])
+    s = trend.di_spread(plus, minus)     # +50, +10, -50, -10
+    up, down = trend.di_direction(plus, minus, s, 20)
+    assert up.tolist() == [True, False, False, False]
+    assert down.tolist() == [False, False, True, False]   # +-10 is too weak either way
+
+
+def test_di_direction_zero_matches_old_rule():
+    rng = np.random.default_rng(0)
+    plus = pd.Series(rng.uniform(0, 40, 500))
+    minus = pd.Series(rng.uniform(0, 40, 500))
+    plus.iloc[:3] = minus.iloc[:3]                       # ties
+    plus.iloc[3] = minus.iloc[3] = 0.0                   # no movement
+    up, down = trend.di_direction(plus, minus, trend.di_spread(plus, minus), 0)
+    old_up = plus > minus
+    assert up.equals(old_up)
+    assert down.equals(~old_up)
+
+
+def test_weak_dominance_becomes_conflict(monkeypatch):
+    monkeypatch.setattr(config, "DI_SPREAD_MIN", 101)    # impossible threshold
+    out = trend.compute(_ohlc(100 + 0.1 * np.arange(400)))
+    assert not out["state"].isin([trend.TREND_UP, trend.TREND_DOWN]).any()
+    assert (out["state"] == trend.CONFLICT).any()

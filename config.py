@@ -76,6 +76,11 @@ ADX_TREND_OFF = 25   # leave trend state below this
 ADX_RANGE_ON = 20    # enter range state below this
 ADX_RANGE_OFF = 23   # leave range state above this
 
+# Direction needs clear DI dominance, not just +DI above -DI.
+# DI spread = 100 x (+DI - -DI) / (+DI + -DI), from -100 to +100.
+# Trend up needs spread >= this; Trend down needs spread <= minus this. 0 = the old +DI vs -DI rule.
+DI_SPREAD_MIN = 20
+
 # EMA lag flag: price crossed the EMA but the EMA still slopes the other way
 SLOPE_BARS = 10        # EMA slope measured over this many bars
 SLOPE_MIN_ATR = 0.1    # ignore slopes flatter than this (in ATRs)

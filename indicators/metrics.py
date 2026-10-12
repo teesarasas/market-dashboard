@@ -5,6 +5,7 @@ signed: centred on zero (symmetric axis, diverging colours, zero line on Y).
 METRICS = {
     "ADX": {"column": "adx", "label": "ADX (trend strength)", "fmt": ".1f", "signed": False},
     "Score": {"column": "score", "label": "Score (ATRs from EMA)", "fmt": "+.2f", "signed": True},
+    "DI spread": {"column": "di_spread", "label": "DI spread (+DI vs -DI dominance)", "fmt": "+.0f", "signed": True},
     "NATR": {"column": "natr", "label": "NATR (ATR % of price)", "fmt": ".3f", "signed": False},
     "ADR used %": {"column": "adr_used", "label": "ADR used %", "fmt": ".0f", "signed": False},
     "Prev-day pos %": {"column": "prev_day_pos", "label": "Position in previous day's range %", "fmt": ".0f", "signed": False},

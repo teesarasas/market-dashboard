@@ -26,6 +26,7 @@ def build(bars: dict, symbol_map: dict, now: pd.Timestamp):
                 "ADX": last["adx"],
                 "+DI": last["plus_di"],
                 "-DI": last["minus_di"],
+                "DI spread": last["di_spread"],
                 "State": last["state"],
                 "Score": last["score"],
                 "NATR": last["natr"],

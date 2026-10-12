@@ -53,6 +53,7 @@ def style(df):
                 "ADX": "{:.1f}",
                 "+DI": "{:.1f}",
                 "-DI": "{:.1f}",
+                "DI spread": "{:+.0f}",
                 "Score": "{:+.2f}",
                 "NATR": "{:.3f}%",
                 "ADR used %": "{:.0f}%",
@@ -94,7 +95,8 @@ else:
 st.caption(
     f"Trend: ADX above {config.ADX_TREND_ON} (stays until below {config.ADX_TREND_OFF}). "
     f"Range: ADX below {config.ADX_RANGE_ON} (stays until above {config.ADX_RANGE_OFF}). "
-    "Conflict: ADX trending but EMA side and DI direction disagree. Stale: market closed or no recent bars.  \n"
+    f"Trend up/down also needs DI spread at least \u00b1{config.DI_SPREAD_MIN}. "
+    "Conflict: ADX trending but EMA side and DI spread do not clearly agree. Stale: market closed or no recent bars.  \n"
     f"NATR: ATR as % of price. ADR used: today's range vs the {config.ADR_DAYS}-day average "
     f"(amber at {config.ADR_USED_WARN}%+). Prev-day pos: 0% = previous day's low, 100% = its high. "
     f"EMA lag: price crossed EMA{config.EMA_LENGTH} but the EMA still slopes the other way."
