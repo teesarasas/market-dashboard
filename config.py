@@ -97,6 +97,9 @@ CURRENCY_GROUPS = ["FX majors", "FX crosses"]   # groups used for strength (no m
 CURRENCY_MIN_PAIR_SHARE = 0.8   # drop bars where fewer than this share of pairs have a score
 CURRENCY_HISTORY_BARS = 144     # 144 x 10m = 24h on the strength chart
 CURRENCY_MIN_COVERAGE = 3       # warn when a currency appears in fewer pairs than this
+# Record high %: share of a currency's pair breakouts that go its way
+RECORD_LOOKBACK_BARS = 144      # a "new high" breaks the highest high of the previous 144 bars (24h)
+RECORD_WINDOW_BARS = 6          # count a pair's most recent breakout within the last 6 bars (1h)
 
 # --- Market Map ---
 TRAIL_BARS = 12      # 12 x 10m = last 2 hours

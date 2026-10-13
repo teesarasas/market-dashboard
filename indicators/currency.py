@@ -34,6 +34,52 @@ def strength(scores: dict) -> pd.DataFrame:
     )
 
 
+def pair_breakouts(df: pd.DataFrame, lookback: int, window: int) -> pd.Series:
+    """+1 if the pair's most recent breakout within the last `window` bars was a new high,
+    -1 if it was a new low, 0 if none.
+
+    A new high = this bar's high above the highest high of the previous `lookback` bars
+    (new low likewise). A bar that breaks both sides counts as neither.
+    """
+    prior_high = df["high"].shift(1).rolling(lookback, min_periods=lookback).max()
+    prior_low = df["low"].shift(1).rolling(lookback, min_periods=lookback).min()
+    up = df["high"] > prior_high
+    down = df["low"] < prior_low
+    raw = up.astype(int) - down.astype(int)
+    recent = raw.replace(0, float("nan"))
+    if window > 1:
+        recent = recent.ffill(limit=window - 1)
+    recent = recent.fillna(0)
+    return recent.where(prior_high.notna()).astype(float)
+
+
+def record_high(breakouts: dict):
+    """Record high % per currency, per bar.
+
+    breakouts: {'EUR/USD': Series of +1/-1/0 from pair_breakouts, ...} (FX pairs only).
+    A pair's new high is a new high for its base and a new low for its quote.
+    Returns (highs, lows, pct): frames indexed by time, one column per currency.
+    pct = highs / (highs + lows) x 100, empty when there were no breakouts either way.
+    """
+    if not breakouts:
+        empty = pd.DataFrame()
+        return empty, empty, empty
+    pairs = pd.concat(breakouts, axis=1).sort_index().ffill(limit=1)
+    enough = pairs.notna().sum(axis=1) >= config.CURRENCY_MIN_PAIR_SHARE * pairs.shape[1]
+    pairs = pairs[enough]
+
+    signed = {}
+    for pair in pairs.columns:
+        base, quote = parse_pair(pair)
+        signed.setdefault(base, []).append(pairs[pair])
+        signed.setdefault(quote, []).append(-pairs[pair])
+    highs = pd.DataFrame({c: sum((s == 1).astype(int) for s in parts) for c, parts in sorted(signed.items())})
+    lows = pd.DataFrame({c: sum((s == -1).astype(int) for s in parts) for c, parts in sorted(signed.items())})
+    total = highs + lows
+    pct = (100 * highs / total).where(total > 0)
+    return highs, lows, pct
+
+
 def breadth(states: dict) -> pd.DataFrame:
     """How many pairs trend in each currency's favour.
 
