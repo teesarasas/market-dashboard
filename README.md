@@ -1,6 +1,6 @@
 # Market dashboard
 
-Trend filter across FX majors, crosses, and metals on 10-minute bars:
+Trend filter across FX majors, crosses, and gold on 10-minute bars:
 price vs EMA120, ADX regime with hysteresis, and a strength score (ATRs from EMA).
 
 ## Run locally
@@ -51,6 +51,7 @@ To test the UI without spending API credits, set `DATA_PROVIDER = "demo"` in `co
 
 ## API usage
 
-Each refresh costs `SOURCE_PAGES` credits per symbol (2 x 15 = 30 by default; two pages of
-5m bars give ~26 FX trading days for the daily metrics). Data is cached for 10 minutes,
+Each refresh costs `SOURCE_PAGES` credits per symbol (2 pages of 5m bars give ~26 FX trading
+days for the daily metrics). Groups in `GROUP_PAGES` use fewer: the 7 gold crosses take 1 each,
+since only the Currencies page uses them. Default: 29 x 2 + 7 x 1 = 65 credits per refresh. Data is cached for 10 minutes,
 so reloading the page doesn't spend credits. "Refresh data" forces a new fetch.

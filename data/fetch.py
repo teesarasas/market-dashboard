@@ -61,14 +61,23 @@ def load_all(provider_name: str):
     smap = symbol_map()
     vendor_to_display = {v: name for name, (_, v) in smap.items()}
 
-    raw, raw_errors = provider.fetch_bars(
-        list(vendor_to_display),
-        api_key,
-        config.SOURCE_INTERVAL,
-        config.OUTPUTSIZE,
-        config.BATCH_SIZE,
-        config.SOURCE_PAGES,
-    )
+    # Symbols grouped by how many pages of history they need
+    by_pages = {}
+    for name, (group, vendor) in smap.items():
+        by_pages.setdefault(config.GROUP_PAGES.get(group, config.SOURCE_PAGES), []).append(vendor)
+
+    raw, raw_errors = {}, {}
+    for pages, vendors in by_pages.items():
+        got, errs = provider.fetch_bars(
+            vendors,
+            api_key,
+            config.SOURCE_INTERVAL,
+            config.OUTPUTSIZE,
+            config.BATCH_SIZE,
+            pages,
+        )
+        raw.update(got)
+        raw_errors.update(errs)
 
     bars = {vendor_to_display[v]: resample(drop_weekend(df), config.TIMEFRAME) for v, df in raw.items()}
     errors = {vendor_to_display[v]: msg for v, msg in raw_errors.items()}

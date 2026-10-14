@@ -77,3 +77,21 @@ def test_record_high_empty_when_no_breakouts():
     idx = pd.date_range("2026-01-05", periods=2, freq="10min", tz="UTC")
     _, _, pct = currency.record_high({"EUR/USD": pd.Series(0.0, index=idx)})
     assert pct.isna().all().all()
+
+
+def test_pair_matrix_is_antisymmetric_and_handles_missing():
+    order = ["EUR", "USD", "JPY", "CHF"]
+    m = currency.pair_matrix({"EUR/USD": 2.0, "USD/JPY": -1.5}, order)
+    assert m.loc["EUR", "USD"] == 2.0 and m.loc["USD", "EUR"] == -2.0
+    assert m.loc["USD", "JPY"] == -1.5 and m.loc["JPY", "USD"] == 1.5
+    assert pd.isna(m.loc["EUR", "EUR"])            # diagonal
+    assert pd.isna(m.loc["EUR", "CHF"])            # pair not loaded
+    names = currency.pair_names(["EUR/USD"], order)
+    assert names.loc["EUR", "USD"] == names.loc["USD", "EUR"] == "EUR/USD"
+    assert pd.isna(names.loc["EUR", "JPY"])
+
+
+def test_state_sign():
+    assert currency.state_sign(trend.TREND_UP) == 1
+    assert currency.state_sign(trend.TREND_DOWN) == -1
+    assert currency.state_sign(trend.CONFLICT) == 0

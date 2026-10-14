@@ -47,9 +47,20 @@ SYMBOLS = {
     },
     "Metals": {
         "XAUUSD": "XAU/USD",
-        "XAGUSD": "XAG/USD",
+    },
+    # Gold priced in each currency, so XAU gets 8 pairs on the Currencies page.
+    # Not traded; hidden from Overview and Market map by default (HIDDEN_GROUPS).
+    "Gold crosses": {
+        "XAUEUR": "XAU/EUR",
+        "XAUGBP": "XAU/GBP",
+        "XAUJPY": "XAU/JPY",
+        "XAUCHF": "XAU/CHF",
+        "XAUAUD": "XAU/AUD",
+        "XAUNZD": "XAU/NZD",
+        "XAUCAD": "XAU/CAD",
     },
 }
+HIDDEN_GROUPS = ["Gold crosses"]   # not ticked in the sidebar filter by default
 
 # --- Data ---
 SOURCE_INTERVAL = "5min"     # Twelve Data has no 10min; we resample
@@ -57,6 +68,7 @@ TIMEFRAME = "10min"          # the timeframe all indicators run on
 OUTPUTSIZE = 5000            # 5m bars per request (Twelve Data max)
 SOURCE_PAGES = 2             # requests per symbol, walking back in time (~26 FX days)
                              # Twelve Data fills weekends with flat bars; those are dropped
+GROUP_PAGES = {"Gold crosses": 1}  # groups that need less history (no daily metrics): 1 credit each
 CACHE_TTL_SECONDS = 600      # refetch at most every 10 minutes
 BATCH_SIZE = 8               # symbols per API request (1 credit each, per page)
 STALE_AFTER_MINUTES = 30     # flag a symbol if its last bar is older than this
@@ -94,12 +106,14 @@ DETAIL_BARS = 300    # bars shown on the detail chart
 
 # --- Currencies ---
 CURRENCY_GROUPS = ["FX majors", "FX crosses"]   # groups used for strength (no metals)
+CURRENCY_METAL_GROUPS = ["Metals", "Gold crosses"]  # shown beside the currencies, kept out of their strength
 CURRENCY_MIN_PAIR_SHARE = 0.8   # drop bars where fewer than this share of pairs have a score
 CURRENCY_HISTORY_BARS = 144     # 144 x 10m = 24h on the strength chart
 CURRENCY_MIN_COVERAGE = 3       # warn when a currency appears in fewer pairs than this
 # Record high %: share of a currency's pair breakouts that go its way
 RECORD_LOOKBACK_BARS = 144      # a "new high" breaks the highest high of the previous 144 bars (24h)
 RECORD_WINDOW_BARS = 6          # count a pair's most recent breakout within the last 6 bars (1h)
+GRID_SCORE_CLIP = 4             # currency grid: scores beyond +/-4 ATR show at full colour
 
 # --- Market Map ---
 TRAIL_BARS = 12      # 12 x 10m = last 2 hours

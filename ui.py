@@ -41,7 +41,8 @@ def load():
 
     with st.sidebar:
         groups = st.multiselect(
-            "Asset classes", list(config.SYMBOLS), default=list(config.SYMBOLS)
+            "Asset classes", list(config.SYMBOLS),
+            default=[g for g in config.SYMBOLS if g not in config.HIDDEN_GROUPS],
         )
         st.caption(f"Fetched {fetched_at:%Y-%m-%d %H:%M} UTC")
         if errors:

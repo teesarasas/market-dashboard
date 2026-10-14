@@ -80,6 +80,36 @@ def record_high(breakouts: dict):
     return highs, lows, pct
 
 
+def state_sign(state: str) -> int:
+    """+1 for Trend up, -1 for Trend down, 0 otherwise (from the pair's base currency view)."""
+    return 1 if state == trend.TREND_UP else -1 if state == trend.TREND_DOWN else 0
+
+
+def pair_matrix(values: dict, currencies: list) -> pd.DataFrame:
+    """Each pair's value from the row currency's point of view.
+
+    values: {'EUR/USD': number, ...}. Cell [A, B] = value of A/B, or -value of B/A
+    when the pair is quoted the other way round. Missing pairs and the diagonal are NaN.
+    """
+    m = pd.DataFrame(float("nan"), index=currencies, columns=currencies)
+    for pair, v in values.items():
+        base, quote = parse_pair(pair)
+        if base in m.index and quote in m.columns:
+            m.loc[base, quote] = v
+            m.loc[quote, base] = -v
+    return m
+
+
+def pair_names(pairs, currencies: list) -> pd.DataFrame:
+    """Which pair sits in each cell of pair_matrix (same name in [A, B] and [B, A]; NaN if none)."""
+    m = pd.DataFrame(None, index=currencies, columns=currencies, dtype=object)
+    for pair in pairs:
+        base, quote = parse_pair(pair)
+        if base in m.index and quote in m.columns:
+            m.loc[base, quote] = m.loc[quote, base] = pair
+    return m
+
+
 def breadth(states: dict) -> pd.DataFrame:
     """How many pairs trend in each currency's favour.
 
