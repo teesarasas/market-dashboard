@@ -73,28 +73,93 @@ def test_rma_seeded_with_simple_mean():
     assert r.iloc[3] == pytest.approx((4.0 * 2 + 8.0) / 3)
 
 
-def _days_of_bars(n_days, open_today=100.0):
-    """n_days FX trading days of 10m bars; every day high 101, low 99, close 100 (TR = 2)."""
-    idx = pd.date_range("2026-03-01 22:00", periods=n_days * 7 // 5 * 144 + 400, freq="10min", tz="UTC")
-    idx = idx[~daily.is_weekend(idx).to_numpy()]
-    days = daily.trading_day(idx)
-    keep = days.isin(days.unique()[:n_days]).to_numpy()
-    idx = idx[keep]
-    df = pd.DataFrame({"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0}, index=idx)
-    last_day = daily.trading_day(idx) == daily.trading_day(idx).iloc[-1]
-    first_bar_today = last_day.to_numpy().argmax()
-    df.iloc[first_bar_today, df.columns.get_loc("open")] = open_today
-    return df
+def _days(rows, start="2026-03-02"):
+    """rows: [(open, high, low, close)] -> daily frame indexed by consecutive dates."""
+    idx = pd.date_range(start, periods=len(rows), freq="D")
+    return pd.DataFrame(rows, index=idx, columns=["open", "high", "low", "close"])
 
 
-def test_distribution_levels():
-    d = risk.distribution(_days_of_bars(20, open_today=100.5))
-    assert d["atr"] == pytest.approx(2.0)
-    assert d["open"] == pytest.approx(100.5)
-    assert d["levels"][1] == pytest.approx(102.5)
-    assert d["levels"][-2] == pytest.approx(96.5)
-    assert sorted(d["levels"]) == [-3, -2, -1, 1, 2, 3]
+def _steady(n, up=1.0, down=1.5, close=100.0):
+    """Day 0 (dropped as possibly partial) + n days that each go `up` above and `down` below the prior close."""
+    return [(close, close, close, close)] + [(close, close + up, close - down, close)] * n
 
 
-def test_distribution_needs_enough_days():
-    assert risk.distribution(_days_of_bars(10)) is None
+def test_distribution_constant_volatility_equals_plain_percentiles():
+    rows = _steady(60) + [(100.2, 100.5, 99.9, 100.3)]           # last row = today, still forming
+    days = _days(rows)
+    d = risk.distribution(days, today=days.index[-1], percentiles=[50, 90], scale_days=20, min_sample=20)
+    assert d["atr"] == pytest.approx(2.5)                       # true range 1 + 1.5 every day
+    assert d["anchor"] == pytest.approx(100)                    # yesterday's close, not today's price
+    assert d["levels"]["Up P90"] == pytest.approx(101)          # 0.4 ATR x 2.5
+    assert d["levels"]["Down P50"] == pytest.approx(98.5)       # 0.6 ATR x 2.5
+    assert list(d["levels"]) == ["Up P90", "Up P50", "Anchor", "Down P50", "Down P90"]
+    assert d["n"] == 60 - 20                                    # first 20 measured days have no ATR yet
+
+
+def test_distribution_scales_to_current_volatility():
+    # 60 calm days, then 20 days twice as wide: same shape in ATRs, so the bands double
+    rows = _steady(60) + _steady(20, up=2.0, down=3.0)[1:]
+    days = _days(rows)
+    d = risk.distribution(days, today=days.index[-1] + pd.Timedelta(days=1), percentiles=[50], scale_days=20,
+                          min_sample=20)
+    assert d["atr"] == pytest.approx(5.0)
+    assert d["up"][50] == pytest.approx(2.0)
+    assert d["down"][50] == pytest.approx(3.0)
+
+
+def test_distribution_matches_reference_loop():
+    rng = np.random.default_rng(7)
+    n = 160
+    closes = 100 + rng.normal(0, 1, n).cumsum()
+    rows = [(c, c + abs(a), c - abs(b), c) for c, a, b in zip(closes, rng.normal(0, 1, n), rng.normal(0, 1.3, n))]
+    days = _days(rows)
+    today = days.index[-1]
+    d = risk.distribution(days, today=today, lookback=100, percentiles=[25, 90], scale_days=20)
+    # independent reference: complete days 1..n-2, TR from day 1, ATR = mean TR of the 20 days before
+    H, L, C = days["high"].to_numpy(), days["low"].to_numpy(), days["close"].to_numpy()
+    m = n - 1                                                   # rows before today
+    tr = [np.nan] + [max(H[k] - L[k], abs(H[k] - C[k - 1]), abs(L[k] - C[k - 1])) for k in range(1, m)]
+    ups, dns = [], []
+    for s in range(1, m):
+        window = tr[s - 20:s]
+        if s - 20 < 1:
+            continue
+        a = np.mean(window)
+        ups.append((H[s] - C[s - 1]) / a)
+        dns.append((C[s - 1] - L[s]) / a)
+    ups, dns = ups[-100:], dns[-100:]
+    atr_now = np.mean(tr[m - 20:m])
+    assert d["n"] == 100
+    assert d["atr"] == pytest.approx(atr_now)
+    assert d["up"][25] == pytest.approx(np.percentile(ups, 25) * atr_now)
+    assert d["down"][90] == pytest.approx(np.percentile(dns, 90) * atr_now)
+
+
+def test_distribution_open_anchor_measures_from_each_days_open():
+    rows = [(100, 100, 100, 100)] + [(100.5, 101, 98.5, 100)] * 40 + [(102.0, 102.1, 101.9, 102)]
+    days = _days(rows)
+    d = risk.distribution(days, today=days.index[-1], percentiles=[50], anchor="open", scale_days=20,
+                          min_sample=20)
+    assert d["anchor"] == pytest.approx(102.0)                  # today's open
+    assert d["up"][50] == pytest.approx(0.5)                    # 101 - 100.5, from the day's own open
+    assert d["down"][50] == pytest.approx(2.0)                  # 100.5 - 98.5
+
+
+def test_distribution_weekend_and_min_sample():
+    days = _days(_steady(45))
+    saturday = days.index[-1] + pd.Timedelta(days=1)            # market closed: every row is complete
+    d = risk.distribution(days, today=saturday, percentiles=[50], scale_days=20, min_sample=20)
+    assert d["n"] == 45 - 20
+    assert risk.distribution(days, today=saturday, scale_days=20, min_sample=30) is None
+
+
+def test_daily_atr_complete_days_only():
+    rows = [(100, 100, 100, 100)] + [(100, 101, 99, 100)] * 20 + [(100, 110, 90, 100)]  # today is wild
+    days = _days(rows)
+    assert risk.daily_atr(days, today=days.index[-1], length=14) == pytest.approx(2.0)
+
+
+def test_current_trading_day_rolls_at_1700_new_york():
+    before = pd.Timestamp("2026-07-15 16:59", tz="America/New_York").tz_convert("UTC")
+    after = pd.Timestamp("2026-07-15 17:00", tz="America/New_York").tz_convert("UTC")
+    assert risk.current_trading_day(after) - risk.current_trading_day(before) == pd.Timedelta(days=1)

@@ -132,8 +132,16 @@ CONTRACT_SIZES = {"XAU/USD": 100}   # ounces per lot
 PIP_SIZES = {"XAU/USD": 0.1}     # FX: 0.0001, JPY quote: 0.01 (automatic)
 LOT_STEP = 0.01
 MIN_LOT = 0.01
-# Distribution stop: today's open +/- k x previous day's daily ATR
-DIST_ATR_DAYS = 14
-DIST_LEVELS = [1, 2, 3]
+# Distribution stop (same method as the updated TradingView "Prev-Day Range -> Next-Day Distribution"
+# indicator): percentiles of how far each past day went above / below the previous close,
+# measured in daily ATRs and re-sized by today's ATR.
+DIST_INTERVAL = "1h"          # daily bars are built from 1h bars (17:00 New York days)
+DIST_OUTPUTSIZE = 5000        # ~145 trading days of 1h bars; 1 credit per symbol, fetched once per trading day
+DIST_LOOKBACK = 100           # days in the sample
+DIST_MIN_SAMPLE = 20          # no bands with fewer days than this
+DIST_PERCENTILES = [25, 50, 75, 90]
+DIST_ANCHOR = "close"         # "close" = previous day's close (indicator default), "open" = today's open
+DIST_SCALE_DAYS = 20          # ATR used for scaling: simple mean of the last 20 daily true ranges
+DIST_ATR_DAYS = 14            # daily ATR shown beside the stop, and used by the ATR stop
 # ATR stop (experiment): source -> default multiplier
 ATR_STOP_DEFAULT_MULT = {"Daily ATR(14)": 0.5, "10-min ATR(14)": 3.0}

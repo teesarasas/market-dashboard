@@ -101,27 +101,75 @@ def rma(values: pd.Series, length: int) -> pd.Series:
     return out
 
 
-def distribution(df: pd.DataFrame, length: int = None, multiples=None):
-    """Today's distribution bands: today's open +/- k x the previous day's daily ATR(length).
+def current_trading_day(now: pd.Timestamp) -> pd.Timestamp:
+    """Trading day (17:00 New York rollover) that `now` falls in."""
+    return daily.trading_day(pd.DatetimeIndex([now])).iloc[0]
 
-    df: intraday OHLC bars. Daily bars use the 17:00 New York rollover. The first day in the data
-    (may be partial) and today (still forming) are left out of the ATR.
-    Returns None if there are not enough complete days, else
-    {"open", "atr", "levels": {k: price}} with k = -3..-1, 1..3.
-    """
+
+def _complete_days(days: pd.DataFrame, today) -> pd.DataFrame:
+    """Finished days only: drops today (still forming) and the first day (may be partial)."""
+    done = days[days.index < today] if today is not None else days.iloc[:-1]
+    return done.iloc[1:]
+
+
+def daily_atr(days: pd.DataFrame, today=None, length: int = None):
+    """Daily ATR(length) through the last complete day (TradingView-style Wilder average)."""
     length = length or config.DIST_ATR_DAYS
-    multiples = multiples or config.DIST_LEVELS
-    days = daily.daily_ohlc(df)
-    if len(days) < length + 2:
+    before_today = days[days.index < today] if today is not None else days.iloc[:-1]
+    atr = rma(trend.true_range(before_today).iloc[1:], length)    # first day: no previous close
+    return None if atr.dropna().empty else float(atr.iloc[-1])
+
+
+def distribution(days: pd.DataFrame, today=None, lookback: int = None, min_sample: int = None,
+                 percentiles=None, anchor: str = None, scale_days: int = None):
+    """Today's ATR-scaled distribution bands (same method as the updated TradingView indicator).
+
+    For each complete day s in the last `lookback`:
+        up   = (high[s] - reference) / ATR      down = (reference - low[s]) / ATR
+    reference = the previous day's close (anchor "close") or day s's own open (anchor "open");
+    ATR = mean true range of the `scale_days` days before s (what was known when day s started).
+    Bands = today's anchor +/- percentile(up or down) x today's ATR (the last `scale_days` complete days).
+    Scaling keeps the shape of past moves but sizes them to current volatility (tested on the MT5 dev
+    data: on volatile days a P90 band was crossed ~15% of the time instead of ~22% unscaled).
+
+    days: daily OHLC indexed by trading day (17:00 New York), today's forming day last if the market is open.
+    today: the current trading day; days before it are complete. None = treat the last row as forming.
+    Returns None without enough history, else
+    {"anchor", "anchor_type", "n", "atr", "up": {p: dist}, "down": {p: dist}, "levels": {label: price}}.
+    """
+    lookback = lookback or config.DIST_LOOKBACK
+    min_sample = min_sample or config.DIST_MIN_SAMPLE
+    percentiles = percentiles or config.DIST_PERCENTILES
+    anchor = anchor or config.DIST_ANCHOR
+    scale_days = scale_days or config.DIST_SCALE_DAYS
+
+    before_today = days[days.index < today] if today is not None else days.iloc[:-1]
+    if len(before_today) < scale_days + 2:
         return None
-    tr = trend.true_range(days).iloc[1:-1]       # complete days only
-    atr = rma(tr, length)
-    if atr.dropna().empty:
+    tr = trend.true_range(before_today)
+    tr.iloc[0] = np.nan                                       # first day may be partial
+    atr_known = tr.rolling(scale_days, min_periods=scale_days).mean()   # through each day's close
+    scale_at_start = atr_known.shift(1)                       # what was known when each day started
+
+    ref = before_today["close"].shift(1) if anchor == "close" else before_today["open"]
+    up = ((before_today["high"] - ref) / scale_at_start).iloc[1:].dropna().tail(lookback)
+    down = ((ref - before_today["low"]) / scale_at_start).iloc[1:].dropna().tail(lookback)
+    atr_now = atr_known.iloc[-1]
+    if len(up) < min_sample or pd.isna(atr_now):
         return None
-    prev_atr = float(atr.iloc[-1])
-    today_open = float(days["open"].iloc[-1])
-    levels = {}
-    for k in multiples:
-        levels[k] = today_open + k * prev_atr
-        levels[-k] = today_open - k * prev_atr
-    return {"open": today_open, "atr": prev_atr, "levels": dict(sorted(levels.items()))}
+    atr_now = float(atr_now)
+
+    if anchor == "close":
+        anchor_price = float(before_today["close"].iloc[-1])
+    else:
+        if today is None or today not in days.index:
+            return None          # today's open not known yet
+        anchor_price = float(days.loc[today, "open"])
+
+    up_q = {p: float(np.percentile(up, p)) * atr_now for p in percentiles}      # linear interpolation
+    down_q = {p: float(np.percentile(down, p)) * atr_now for p in percentiles}
+    levels = {f"Up P{p:g}": anchor_price + up_q[p] for p in reversed(percentiles)}
+    levels["Anchor"] = anchor_price
+    levels.update({f"Down P{p:g}": anchor_price - down_q[p] for p in percentiles})
+    return {"anchor": anchor_price, "anchor_type": anchor, "n": len(up), "atr": atr_now,
+            "up": up_q, "down": down_q, "levels": levels}

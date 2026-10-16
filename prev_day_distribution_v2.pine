@@ -1,0 +1,209 @@
+//@version=6
+indicator("Prev-Day Range -> Next-Day Distribution (ATR-scaled)", overlay=true, max_lines_count=50, max_boxes_count=50, max_labels_count=50)
+
+// =============================================================================
+// CONCEPT
+// -----------------------------------------------------------------------------
+// IN-SAMPLE:  for each completed trading day we record how far price traveled
+//             above and below the reference (the PRIOR close, or that day's own
+//             open), measured in daily ATRs known when that day started:
+//                 upMove   = (dayHigh - reference) / ATR
+//                 downMove = (reference - dayLow)  / ATR
+// OUT-OF-SAMPLE: today's bands = anchor +/- percentile(moves) x TODAY's ATR.
+//             The percentiles keep the real shape of past days (fat tails, up/down
+//             asymmetry); the ATR re-sizes them to current volatility.
+//
+// Changes from v1:
+//   1. request.security uses [1] with lookahead_on, so every bar (historical and
+//      live) sees the previous completed day. v1 used lookahead_off, which on
+//      historical bars probably returned data one day older than on live bars.
+//   2. "Today's open" anchor now uses today's open (v1 used yesterday's open), and
+//      past moves are then measured from each day's own open, so the sample and
+//      the projection use the same reference.
+//   3. ATR scaling (on by default). Tested on the MT5 dev data, 29 instruments:
+//      on volatile days the unscaled P90 band was crossed ~22% of the time
+//      instead of 10%; scaled, ~15%. Calm days stay close to the target.
+//   4. Percentile order is checked.
+// The Python dashboard (indicators/risk.py) uses this exact method.
+// =============================================================================
+
+// ----------------------------- Inputs ---------------------------------------
+lookback      = input.int(100, "Lookback (sessions, in-sample size)", minval=20, maxval=500)
+anchorOnClose = input.bool(true, "Anchor on previous close (unchecked = today's open)")
+volScale      = input.bool(true, "Scale by daily ATR (adapts to current volatility)")
+atrLen        = input.int(20, "Daily ATR length (simple mean of true range)", minval=5, maxval=100)
+pLow          = input.float(25, "Lower band percentile", minval=1, maxval=49)
+pMid          = input.float(50, "Median percentile", minval=1, maxval=99)
+pHigh         = input.float(75, "Upper band percentile", minval=51, maxval=99)
+pExtreme      = input.float(90, "Extreme band percentile", minval=51, maxval=99)
+minSample     = input.int(20, "Minimum sample size before plotting", minval=5, maxval=500)
+showTable     = input.bool(true, "Show stats table")
+
+if barstate.isfirst and not (pLow < pMid and pMid < pHigh and pHigh < pExtreme)
+    runtime.error("Percentiles must increase: lower < median < upper < extreme")
+
+// ----------------------- Pull confirmed daily data ---------------------------
+// [1] with lookahead_on = the previous COMPLETED day on every chart bar, historical
+// and live alike (TradingView's recommended non-repainting pattern).
+// atrPrev1 = ATR through yesterday (known now); atrPrev2 = ATR through the day
+// before yesterday (known when yesterday started).
+[hPrev1, lPrev1, oPrev1, cPrev1, cPrev2, atrPrev1, atrPrev2] = request.security(
+     syminfo.tickerid, "D",
+     [high[1], low[1], open[1], close[1], close[2], ta.sma(ta.tr(true), atrLen)[1], ta.sma(ta.tr(true), atrLen)[2]],
+     lookahead = barmerge.lookahead_on)
+
+// Today's open is fixed once the session starts, so lookahead cannot see the future here.
+oToday = request.security(syminfo.tickerid, "D", open, lookahead = barmerge.lookahead_on)
+
+// ----------------------------- State -----------------------------------------
+var float[] upMoves   = array.new_float(0)
+var float[] downMoves = array.new_float(0)
+
+newDay = ta.change(time("D")) != 0
+
+refPrev  = anchorOnClose ? cPrev2 : oPrev1        // what yesterday's move is measured from
+scaleIn  = volScale ? atrPrev2 : 1.0              // ATR known when yesterday started
+scaleNow = volScale ? atrPrev1 : 1.0              // ATR known now
+
+if newDay and not na(hPrev1) and not na(lPrev1) and not na(refPrev) and not na(scaleIn) and scaleIn > 0
+    array.push(upMoves,   (hPrev1 - refPrev) / scaleIn)
+    array.push(downMoves, (refPrev - lPrev1) / scaleIn)
+    if array.size(upMoves) > lookback
+        array.shift(upMoves)
+    if array.size(downMoves) > lookback
+        array.shift(downMoves)
+
+sampleSize = array.size(upMoves)
+haveEnough = sampleSize >= minSample and not na(scaleNow)
+
+// ----------------------------- Percentiles (in price) -------------------------
+upLow      = haveEnough ? array.percentile_linear_interpolation(upMoves, pLow)      * scaleNow : na
+upMid      = haveEnough ? array.percentile_linear_interpolation(upMoves, pMid)      * scaleNow : na
+upHigh     = haveEnough ? array.percentile_linear_interpolation(upMoves, pHigh)     * scaleNow : na
+upExtreme  = haveEnough ? array.percentile_linear_interpolation(upMoves, pExtreme)  * scaleNow : na
+
+dnLow      = haveEnough ? array.percentile_linear_interpolation(downMoves, pLow)     * scaleNow : na
+dnMid      = haveEnough ? array.percentile_linear_interpolation(downMoves, pMid)     * scaleNow : na
+dnHigh     = haveEnough ? array.percentile_linear_interpolation(downMoves, pHigh)    * scaleNow : na
+dnExtreme  = haveEnough ? array.percentile_linear_interpolation(downMoves, pExtreme) * scaleNow : na
+
+// ----------------------------- Anchor -----------------------------------------
+anchor = anchorOnClose ? cPrev1 : oToday
+
+// ----------------------------- Drawing ----------------------------------------
+var line lnAnchor   = na
+var line lnUpLow    = na
+var line lnUpMid    = na
+var line lnUpHigh   = na
+var line lnUpExt    = na
+var line lnDnLow    = na
+var line lnDnMid    = na
+var line lnDnHigh   = na
+var line lnDnExt    = na
+var linefill fillUp = na
+var linefill fillDn = na
+var label lblAnchor = na
+var label lblUpLow  = na
+var label lblUpMid  = na
+var label lblUpHigh = na
+var label lblUpExt  = na
+var label lblDnLow  = na
+var label lblDnMid  = na
+var label lblDnHigh = na
+var label lblDnExt  = na
+
+if newDay and haveEnough
+    // clear yesterday's projection
+    line.delete(lnAnchor)
+    line.delete(lnUpLow)
+    line.delete(lnUpMid)
+    line.delete(lnUpHigh)
+    line.delete(lnUpExt)
+    line.delete(lnDnLow)
+    line.delete(lnDnMid)
+    line.delete(lnDnHigh)
+    line.delete(lnDnExt)
+    linefill.delete(fillUp)
+    linefill.delete(fillDn)
+
+    x0 = bar_index
+
+    lnAnchor := line.new(x0, anchor, x0, anchor, extend = extend.right, color = color.gray, style = line.style_solid, width = 1)
+
+    lnUpMid   := line.new(x0, anchor + upMid,     x0, anchor + upMid,     extend = extend.right, color = color.new(color.teal, 0),  style = line.style_solid,  width = 2)
+    lnUpLow   := line.new(x0, anchor + upLow,     x0, anchor + upLow,     extend = extend.right, color = color.new(color.teal, 40), style = line.style_dashed, width = 1)
+    lnUpHigh  := line.new(x0, anchor + upHigh,    x0, anchor + upHigh,    extend = extend.right, color = color.new(color.teal, 40), style = line.style_dashed, width = 1)
+    lnUpExt   := line.new(x0, anchor + upExtreme, x0, anchor + upExtreme, extend = extend.right, color = color.new(color.teal, 60), style = line.style_dotted, width = 1)
+
+    lnDnMid   := line.new(x0, anchor - dnMid,     x0, anchor - dnMid,     extend = extend.right, color = color.new(color.maroon, 0),  style = line.style_solid,  width = 2)
+    lnDnLow   := line.new(x0, anchor - dnLow,     x0, anchor - dnLow,     extend = extend.right, color = color.new(color.maroon, 40), style = line.style_dashed, width = 1)
+    lnDnHigh  := line.new(x0, anchor - dnHigh,    x0, anchor - dnHigh,    extend = extend.right, color = color.new(color.maroon, 40), style = line.style_dashed, width = 1)
+    lnDnExt   := line.new(x0, anchor - dnExtreme, x0, anchor - dnExtreme, extend = extend.right, color = color.new(color.maroon, 60), style = line.style_dotted, width = 1)
+
+    fillUp := linefill.new(lnUpLow, lnUpHigh, color = color.new(color.teal, 85))
+    fillDn := linefill.new(lnDnLow, lnDnHigh, color = color.new(color.maroon, 85))
+
+    // Price labels: recreated each new day, re-pinned to the current bar below
+    label.delete(lblAnchor)
+    label.delete(lblUpLow)
+    label.delete(lblUpMid)
+    label.delete(lblUpHigh)
+    label.delete(lblUpExt)
+    label.delete(lblDnLow)
+    label.delete(lblDnMid)
+    label.delete(lblDnHigh)
+    label.delete(lblDnExt)
+
+    lblAnchor := label.new(x0, anchor,             "Anchor " + str.tostring(anchor, format.mintick),                                              style = label.style_label_left, color = color.new(color.gray, 70),   textcolor = color.white, size = size.small)
+    lblUpMid  := label.new(x0, anchor + upMid,     "P" + str.tostring(pMid)     + " " + str.tostring(anchor + upMid,     format.mintick), style = label.style_label_left, color = color.new(color.teal, 20),   textcolor = color.white, size = size.small)
+    lblUpLow  := label.new(x0, anchor + upLow,     "P" + str.tostring(pLow)     + " " + str.tostring(anchor + upLow,     format.mintick), style = label.style_label_left, color = color.new(color.teal, 60),   textcolor = color.white, size = size.small)
+    lblUpHigh := label.new(x0, anchor + upHigh,    "P" + str.tostring(pHigh)    + " " + str.tostring(anchor + upHigh,    format.mintick), style = label.style_label_left, color = color.new(color.teal, 60),   textcolor = color.white, size = size.small)
+    lblUpExt  := label.new(x0, anchor + upExtreme, "P" + str.tostring(pExtreme) + " " + str.tostring(anchor + upExtreme, format.mintick), style = label.style_label_left, color = color.new(color.teal, 75),   textcolor = color.white, size = size.small)
+    lblDnMid  := label.new(x0, anchor - dnMid,     "P" + str.tostring(pMid)     + " " + str.tostring(anchor - dnMid,     format.mintick), style = label.style_label_left, color = color.new(color.maroon, 20), textcolor = color.white, size = size.small)
+    lblDnLow  := label.new(x0, anchor - dnLow,     "P" + str.tostring(pLow)     + " " + str.tostring(anchor - dnLow,     format.mintick), style = label.style_label_left, color = color.new(color.maroon, 60), textcolor = color.white, size = size.small)
+    lblDnHigh := label.new(x0, anchor - dnHigh,    "P" + str.tostring(pHigh)    + " " + str.tostring(anchor - dnHigh,    format.mintick), style = label.style_label_left, color = color.new(color.maroon, 60), textcolor = color.white, size = size.small)
+    lblDnExt  := label.new(x0, anchor - dnExtreme, "P" + str.tostring(pExtreme) + " " + str.tostring(anchor - dnExtreme, format.mintick), style = label.style_label_left, color = color.new(color.maroon, 75), textcolor = color.white, size = size.small)
+
+// Re-pin every bar so labels track the right edge of the chart.
+if haveEnough and not na(lblAnchor)
+    label.set_x(lblAnchor, bar_index)
+    label.set_x(lblUpMid,  bar_index)
+    label.set_x(lblUpLow,  bar_index)
+    label.set_x(lblUpHigh, bar_index)
+    label.set_x(lblUpExt,  bar_index)
+    label.set_x(lblDnMid,  bar_index)
+    label.set_x(lblDnLow,  bar_index)
+    label.set_x(lblDnHigh, bar_index)
+    label.set_x(lblDnExt,  bar_index)
+
+// ----------------------------- Stats table ------------------------------------
+if showTable and barstate.islast
+    var table t = table.new(position.top_right, 3, 7, border_width = 1)
+
+    table.cell(t, 0, 0, "Percentile", text_color = color.white, bgcolor = color.gray)
+    table.cell(t, 1, 0, "Distance (up/dn)", text_color = color.white, bgcolor = color.gray)
+    table.cell(t, 2, 0, "Price (up/dn)", text_color = color.white, bgcolor = color.gray)
+
+    table.cell(t, 0, 1, "In-sample n=" + str.tostring(sampleSize), text_color = color.white)
+    table.cell(t, 1, 1, "Anchor", text_color = color.white)
+    table.cell(t, 2, 1, str.tostring(anchor, format.mintick), text_color = color.white)
+
+    table.cell(t, 0, 2, "P" + str.tostring(pLow), text_color = color.teal)
+    table.cell(t, 1, 2, str.tostring(upLow, format.mintick) + " / " + str.tostring(dnLow, format.mintick), text_color = color.white)
+    table.cell(t, 2, 2, str.tostring(anchor + upLow, format.mintick) + " / " + str.tostring(anchor - dnLow, format.mintick), text_color = color.yellow)
+
+    table.cell(t, 0, 3, "P" + str.tostring(pMid), text_color = color.teal)
+    table.cell(t, 1, 3, str.tostring(upMid, format.mintick) + " / " + str.tostring(dnMid, format.mintick), text_color = color.white)
+    table.cell(t, 2, 3, str.tostring(anchor + upMid, format.mintick) + " / " + str.tostring(anchor - dnMid, format.mintick), text_color = color.yellow)
+
+    table.cell(t, 0, 4, "P" + str.tostring(pHigh), text_color = color.teal)
+    table.cell(t, 1, 4, str.tostring(upHigh, format.mintick) + " / " + str.tostring(dnHigh, format.mintick), text_color = color.white)
+    table.cell(t, 2, 4, str.tostring(anchor + upHigh, format.mintick) + " / " + str.tostring(anchor - dnHigh, format.mintick), text_color = color.yellow)
+
+    table.cell(t, 0, 5, "P" + str.tostring(pExtreme), text_color = color.maroon)
+    table.cell(t, 1, 5, str.tostring(upExtreme, format.mintick) + " / " + str.tostring(dnExtreme, format.mintick), text_color = color.white)
+    table.cell(t, 2, 5, str.tostring(anchor + upExtreme, format.mintick) + " / " + str.tostring(anchor - dnExtreme, format.mintick), text_color = color.yellow)
+
+    table.cell(t, 0, 6, volScale ? "Daily ATR(" + str.tostring(atrLen) + ")" : "ATR scaling", text_color = color.white)
+    table.cell(t, 1, 6, volScale ? str.tostring(scaleNow, format.mintick) : "off", text_color = color.white)
+    table.cell(t, 2, 6, "", text_color = color.white)

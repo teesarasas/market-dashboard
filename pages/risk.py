@@ -3,7 +3,7 @@ import streamlit as st
 
 import config
 import ui
-from data.fetch import symbol_map
+from data.fetch import load_daily, symbol_map
 from indicators import risk
 
 history, snap, errors, fetched_at, groups = ui.load()
@@ -24,6 +24,9 @@ prices = {v: history[n]["close"].iloc[-1] for n, (g, v) in smap.items() if n in 
 if not tradable:
     st.info("No instruments loaded.")
     st.stop()
+
+today = risk.current_trading_day(pd.Timestamp.now(tz="UTC"))
+daily_bars, daily_errors = load_daily(config.DATA_PROVIDER, str(today.date()))
 
 
 def qp_float(key, default):
@@ -46,9 +49,14 @@ left, right = st.columns([1, 1.3], gap="large")
 # ---------------- Inputs ----------------
 with left:
     names = list(tradable)
-    current = st.session_state.get("symbol")
-    name = st.selectbox("Instrument", names, index=names.index(current) if current in names else 0)
-    st.session_state["symbol"] = name
+    # Follow a symbol chosen on another page (e.g. "Size this trade"), otherwise keep this page's choice
+    chosen_elsewhere = st.session_state.get("symbol")
+    if chosen_elsewhere in names and chosen_elsewhere != st.session_state.get("_risk_synced"):
+        st.session_state["risk_symbol"] = chosen_elsewhere
+    if st.session_state.get("risk_symbol") not in names:
+        st.session_state["risk_symbol"] = names[0]
+    name = st.selectbox("Instrument", names, key="risk_symbol")
+    st.session_state["symbol"] = st.session_state["_risk_synced"] = name
     vendor = tradable[name]
     pip = risk.pip_size(vendor)
     dec = risk.price_decimals(vendor)
@@ -74,23 +82,25 @@ with left:
     mode_label = st.radio("Stop loss", list(MODES.values()), horizontal=True, key="risk_mode")
     mode = next(k for k, v in MODES.items() if v == mode_label)
 
-    dist = risk.distribution(history[name])
+    days = daily_bars.get(name)
+    dist = risk.distribution(days, today) if days is not None else None
+    atr_day = risk.daily_atr(days, today) if days is not None else None
     atr_10m = float(history[name]["atr"].iloc[-1])
     sign = -1 if side == "Long" else 1   # which way the stop sits from entry
     stop = None
 
     if mode == "distribution":
         if dist is None:
-            st.error(f"Not enough daily history for a {config.DIST_ATR_DAYS}-day ATR on {name}.")
+            why = daily_errors.get(name, f"fewer than {config.DIST_MIN_SAMPLE} usable days of daily history")
+            st.error(f"No distribution bands for {name}: {why}. Use a manual stop.")
         else:
-            levels = {"Open": dist["open"], **{f"{k:+d}σ": p for k, p in dist["levels"].items()}}
+            levels = dist["levels"]
             beyond = {lbl: p for lbl, p in levels.items() if (p < entry if side == "Long" else p > entry)}
             if not beyond:
                 st.warning("Entry is beyond every band on the stop side. Use a manual stop.")
             else:
                 # nearest band first
-                ordered = sorted(beyond.items(), key=lambda kv: abs(entry - kv[1]))
-                options = [lbl for lbl, _ in ordered]
+                options = sorted(beyond, key=lambda lbl: abs(entry - beyond[lbl]))
                 pick = st.selectbox(
                     "Stop at band", options,
                     format_func=lambda l: f"{l}   {beyond[l]:.{dec}f}   ({abs(entry - beyond[l]) / pip:.1f} pips)",
@@ -99,18 +109,27 @@ with left:
                 buffer_pips = st.number_input("Buffer beyond the band (pips)", min_value=0.0, value=0.0, step=0.5,
                                               key=f"buffer_{name}")
                 stop = beyond[pick] + sign * buffer_pips * pip
+            anchor_txt = "yesterday's close" if dist["anchor_type"] == "close" else "today's open"
             st.caption(
-                f"Bands = today's open {dist['open']:.{dec}f} ± 1/2/3 × previous day's daily ATR({config.DIST_ATR_DAYS}) "
-                f"{dist['atr']:.{dec}f}. Day starts 17:00 New York. Check these against your TradingView levels."
+                f"Bands = {anchor_txt} {dist['anchor']:.{dec}f} ± percentiles of the last {dist['n']} days' moves, "
+                f"measured in daily ATR({config.DIST_SCALE_DAYS}) and re-sized by today's ATR "
+                f"{dist['atr']:.{dec}f}. Day starts 17:00 New York. "
+                "The bands cover one day's move: a trade held 2–3 days needs more room."
             )
+            with st.expander("All bands"):
+                st.dataframe(
+                    pd.DataFrame([{"Band": lbl, "Price": f"{p:.{dec}f}",
+                                   "From entry (pips)": f"{(p - entry) / pip:+.1f}"} for lbl, p in levels.items()]),
+                    hide_index=True, width="stretch",
+                )
     elif mode == "manual":
-        default = entry + sign * (0.5 * dist["atr"] if dist else 3 * atr_10m)
+        default = entry + sign * (0.5 * atr_day if atr_day else 3 * atr_10m)
         stop = st.number_input("Stop loss price", value=round(default, dec), step=pip, format=fmt,
                                key=f"stop_{name}_{side}")
     else:
         sources = list(config.ATR_STOP_DEFAULT_MULT)
         source = st.selectbox("ATR", sources, key="atr_source")
-        atr_value = (dist["atr"] if dist else None) if source.startswith("Daily") else atr_10m
+        atr_value = atr_day if source.startswith("Daily") else atr_10m
         mult = st.number_input("Multiplier", min_value=0.1, step=0.1, format="%.1f",
                                value=config.ATR_STOP_DEFAULT_MULT[source], key=f"mult_{source}")
         if atr_value is None:
@@ -154,7 +173,7 @@ with right:
         pd.DataFrame([{
             "Stop loss": f"{stop:.{dec}f}",
             "Distance (pips)": f"{distance / pip:.1f}",
-            "× daily ATR": "–" if not dist else f"{distance / dist['atr']:.2f}",
+            "× daily ATR": "–" if not atr_day else f"{distance / atr_day:.2f}",
             "× 10-min ATR": f"{distance / atr_10m:.1f}",
         }]),
         hide_index=True, width="stretch",
@@ -185,7 +204,7 @@ with right:
         st.warning(f"Risk {risk_pct:.2f}% is above your {config.RISK_MAX_PCT:.2f}% per-trade ceiling.")
     if distance < atr_10m:
         st.warning("Stop is inside one 10-minute ATR: normal noise can hit it.")
-    if dist and abs(entry - latest) > 0.5 * dist["atr"]:
+    if atr_day and abs(entry - latest) > 0.5 * atr_day:
         st.warning(f"Entry is far from the latest price ({latest:.{dec}f}). Check for a typo.")
     if mode == "atr":
         st.info("ATR stop is an experiment. Log the trade's stop method as ATR so it stays separate.")

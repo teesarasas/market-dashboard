@@ -2,7 +2,7 @@
 import streamlit as st
 
 import config
-from data.fetch import load_all, symbol_map
+from data.fetch import load_all, load_daily, symbol_map
 from indicators import snapshot, trend
 
 AMBER = "#e59f2d"
@@ -30,6 +30,7 @@ def load():
         st.caption(f"Source: {config.DATA_PROVIDER}, {config.TIMEFRAME} bars")
         if st.button("Refresh data", width="stretch"):
             load_all.clear()
+            load_daily.clear()
 
     try:
         bars, errors, fetched_at = load_all(config.DATA_PROVIDER)

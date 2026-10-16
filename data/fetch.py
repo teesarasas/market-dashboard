@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 import config
 from data.providers import demo_provider, twelvedata_provider
-from indicators.daily import is_weekend
+from indicators.daily import daily_ohlc, is_weekend
 
 load_dotenv()
 
@@ -82,3 +82,21 @@ def load_all(provider_name: str):
     bars = {vendor_to_display[v]: resample(drop_weekend(df), config.TIMEFRAME) for v, df in raw.items()}
     errors = {vendor_to_display[v]: msg for v, msg in raw_errors.items()}
     return bars, errors, pd.Timestamp.now(tz="UTC")
+
+
+@st.cache_data(ttl=26 * 3600, show_spinner="Fetching daily history…")
+def load_daily(provider_name: str, trading_day: str):
+    """Daily OHLC (17:00 New York days) for the risk calculator's instruments, built from 1h bars.
+
+    `trading_day` is only part of the cache key: the data is fetched once per trading day.
+    Returns (days: {display: daily DataFrame}, errors: {display: msg}).
+    """
+    provider = PROVIDERS[provider_name]
+    api_key = get_api_key() if provider_name == "twelvedata" else None
+    vendors = {v: name for name, (group, v) in symbol_map().items() if group in config.RISK_GROUPS}
+    raw, raw_errors = provider.fetch_bars(
+        list(vendors), api_key, config.DIST_INTERVAL, config.DIST_OUTPUTSIZE, config.BATCH_SIZE, 1
+    )
+    days = {vendors[v]: daily_ohlc(drop_weekend(df)) for v, df in raw.items()}
+    errors = {vendors[v]: msg for v, msg in raw_errors.items()}
+    return days, errors

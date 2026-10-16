@@ -44,7 +44,7 @@ To test the UI without spending API credits, set `DATA_PROVIDER = "demo"` in `co
 - `indicators/trend.py` — EMA, ADX/DI, ATR, NATR, regime, state, EMA lag (no Streamlit, reusable for backtests)
 - `indicators/daily.py` — FX trading day (17:00 New York rollover), ADR, previous-day range
 - `indicators/currency.py` — currency strength and breadth from FX pair scores
-- `indicators/risk.py` — position sizing, stop bands, R targets (reusable by the robot)
+- `indicators/risk.py` — position sizing, ATR-scaled distribution bands, R targets (reusable by the robot)
 - `indicators/metrics.py` — metrics available on the Market map axes
 - `indicators/snapshot.py` — latest values per symbol
 - `pages/` — Overview, Market map, Symbol, Currencies, Risk calculator
@@ -54,5 +54,7 @@ To test the UI without spending API credits, set `DATA_PROVIDER = "demo"` in `co
 
 Each refresh costs `SOURCE_PAGES` credits per symbol (2 pages of 5m bars give ~26 FX trading
 days for the daily metrics). Groups in `GROUP_PAGES` use fewer: the 7 gold crosses take 1 each,
-since only the Currencies page uses them. Default: 29 x 2 + 7 x 1 = 65 credits per refresh. Data is cached for 10 minutes,
+since only the Currencies page uses them. Default: 29 x 2 + 7 x 1 = 65 credits per refresh.
+The Risk calculator also fetches 1h bars once per trading day for the distribution bands
+(29 credits a day). Data is cached for 10 minutes,
 so reloading the page doesn't spend credits. "Refresh data" forces a new fetch.
