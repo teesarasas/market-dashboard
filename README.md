@@ -44,9 +44,10 @@ To test the UI without spending API credits, set `DATA_PROVIDER = "demo"` in `co
 - `indicators/trend.py` — EMA, ADX/DI, ATR, NATR, regime, state, EMA lag (no Streamlit, reusable for backtests)
 - `indicators/daily.py` — FX trading day (17:00 New York rollover), ADR, previous-day range
 - `indicators/currency.py` — currency strength and breadth from FX pair scores
+- `indicators/risk.py` — position sizing, stop bands, R targets (reusable by the robot)
 - `indicators/metrics.py` — metrics available on the Market map axes
 - `indicators/snapshot.py` — latest values per symbol
-- `pages/` — Overview, Market map, Symbol, Currencies
+- `pages/` — Overview, Market map, Symbol, Currencies, Risk calculator
 - `tests/` — run with `python -m pytest` (install `requirements-dev.txt` first)
 
 ## API usage

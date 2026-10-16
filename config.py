@@ -117,3 +117,23 @@ GRID_SCORE_CLIP = 4             # currency grid: scores beyond +/-4 ATR show at 
 
 # --- Market Map ---
 TRAIL_BARS = 12      # 12 x 10m = last 2 hours
+
+# --- Risk calculator ---
+ACCOUNT_CURRENCY = "USD"
+RISK_DEFAULT_BALANCE = 100_000   # used when the URL has no ?balance=
+RISK_DEFAULT_PCT = 0.25          # used when the URL has no ?risk=
+RISK_MAX_PCT = 0.33              # warn above this (plan: 0.25-0.33% per trade)
+RISK_GROUPS = ["FX majors", "FX crosses", "Metals"]   # instruments you can size
+RISK_TARGETS_R = [1, 2, 3]       # take-profit levels shown, in multiples of the stop distance
+# Contract specs: ASSUMED until checked in FTMO MT5 (right-click symbol > Specification)
+SPECS_CONFIRMED = False
+FX_CONTRACT_SIZE = 100_000       # units of the base currency per lot
+CONTRACT_SIZES = {"XAU/USD": 100}   # ounces per lot
+PIP_SIZES = {"XAU/USD": 0.1}     # FX: 0.0001, JPY quote: 0.01 (automatic)
+LOT_STEP = 0.01
+MIN_LOT = 0.01
+# Distribution stop: today's open +/- k x previous day's daily ATR
+DIST_ATR_DAYS = 14
+DIST_LEVELS = [1, 2, 3]
+# ATR stop (experiment): source -> default multiplier
+ATR_STOP_DEFAULT_MULT = {"Daily ATR(14)": 0.5, "10-min ATR(14)": 3.0}

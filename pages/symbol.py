@@ -21,6 +21,8 @@ name = st.selectbox(
     "Symbol", names, index=names.index(current) if current in names else 0, key="symbol_picker"
 )
 st.session_state["symbol"] = name
+if st.button("Size this trade"):
+    st.switch_page("pages/risk.py")
 
 ind = history[name]
 last = ind.iloc[-1]
