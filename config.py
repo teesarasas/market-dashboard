@@ -145,3 +145,13 @@ DIST_SCALE_DAYS = 20          # ATR used for scaling: simple mean of the last 20
 DIST_ATR_DAYS = 14            # daily ATR shown beside the stop, and used by the ATR stop
 # ATR stop (experiment): source -> default multiplier
 ATR_STOP_DEFAULT_MULT = {"Daily ATR(14)": 0.5, "10-min ATR(14)": 3.0}
+
+# --- Trade log ---
+JOURNAL_TABLE = "trades"                 # Supabase table (sql/trades.sql)
+JOURNAL_DEMO_FILE = "trade_log_demo.csv" # used in demo mode instead of Supabase
+JOURNAL_TAGS = [
+    "Breakout", "Pullback", "Strongest vs weakest", "Trend continuation",
+    "Range fade", "Room left (ADR low)", "News", "Other",
+]
+DISPLAY_TZ = "Asia/Bangkok"              # times shown on the Trade log page
+SESSIONS = [(0, "Asia"), (7, "London"), (12, "London/NY overlap"), (16, "New York"), (21, "Late")]  # UTC start hour

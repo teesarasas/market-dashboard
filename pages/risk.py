@@ -3,8 +3,9 @@ import streamlit as st
 
 import config
 import ui
+from data import tradelog
 from data.fetch import load_daily, symbol_map
-from indicators import risk
+from indicators import currency, journal, risk
 
 history, snap, errors, fetched_at, groups = ui.load()
 
@@ -88,6 +89,7 @@ with left:
     atr_10m = float(history[name]["atr"].iloc[-1])
     sign = -1 if side == "Long" else 1   # which way the stop sits from entry
     stop = None
+    stop_label = None
 
     if mode == "distribution":
         if dist is None:
@@ -109,6 +111,7 @@ with left:
                 buffer_pips = st.number_input("Buffer beyond the band (pips)", min_value=0.0, value=0.0, step=0.5,
                                               key=f"buffer_{name}")
                 stop = beyond[pick] + sign * buffer_pips * pip
+                stop_label = pick + (f" + {buffer_pips:g} pips" if buffer_pips else "")
             anchor_txt = "yesterday's close" if dist["anchor_type"] == "close" else "today's open"
             st.caption(
                 f"Bands = {anchor_txt} {dist['anchor']:.{dec}f} ± percentiles of the last {dist['n']} days' moves, "
@@ -126,6 +129,7 @@ with left:
         default = entry + sign * (0.5 * atr_day if atr_day else 3 * atr_10m)
         stop = st.number_input("Stop loss price", value=round(default, dec), step=pip, format=fmt,
                                key=f"stop_{name}_{side}")
+        stop_label = "Manual"
     else:
         sources = list(config.ATR_STOP_DEFAULT_MULT)
         source = st.selectbox("ATR", sources, key="atr_source")
@@ -136,6 +140,7 @@ with left:
             st.error("Not enough daily history for the daily ATR.")
         else:
             stop = entry + sign * mult * atr_value
+            stop_label = f"{mult:g} x {source}"
             st.caption(f"{source} = {atr_value:.{dec}f}. Experiment: mark trades sized this way as ATR in your log.")
 
 # Remember settings in the URL so a bookmark brings them back
@@ -213,3 +218,88 @@ with right:
             "⚠ Contract sizes are assumed (FX 100,000 units, XAUUSD 100 oz, lot step 0.01). "
             "Confirm them in MT5 (Specification) and set SPECS_CONFIRMED = True in config.py."
         )
+
+    # ---------------- Log this trade ----------------
+    st.divider()
+    st.subheader("Log this trade")
+    log, log_problem = tradelog.get_log()
+    if log is None:
+        st.info(log_problem)
+        st.stop()
+
+    msg = st.session_state.pop("_log_msg", None)
+    if msg:
+        st.success(msg)
+    if st.session_state.pop("_clear_log_inputs", False):
+        st.session_state["log_tags"] = []
+        st.session_state["log_note"] = ""
+
+    tp_mode = st.radio("Take profit", ["R multiple", "Band"], horizontal=True, key="tp_mode")
+    tp, tp_choice = None, None
+    if tp_mode == "R multiple":
+        r_pick = st.selectbox("Target", config.RISK_TARGETS_R, format_func=lambda r: f"{r}R", key="tp_r")
+        tp, tp_choice = risk.targets(entry, stop, [r_pick])[r_pick], f"{r_pick}R"
+    elif dist is None:
+        st.warning("No bands for this instrument. Use an R multiple.")
+    else:
+        ahead = {lbl: p for lbl, p in dist["levels"].items() if (p > entry if side == "Long" else p < entry)}
+        if not ahead:
+            st.warning("No band beyond the entry in the trade's direction. Use an R multiple.")
+        else:
+            tp_opts = sorted(ahead, key=lambda lbl: abs(ahead[lbl] - entry))
+            tp_pick = st.selectbox(
+                "Target band", tp_opts, key=f"tp_band_{name}_{side}",
+                format_func=lambda l: f"{l}   {ahead[l]:.{dec}f}   ({abs(ahead[l] - entry) / pip:.1f} pips, "
+                                      f"{abs(ahead[l] - entry) / distance:.2f}R)",
+            )
+            tp, tp_choice = ahead[tp_pick], tp_pick
+    if tp is not None:
+        st.caption(f"Take profit {tp:.{dec}f}: {abs(tp - entry) / pip:.1f} pips, "
+                   f"{abs(tp - entry) / distance:.2f}R, about {abs(tp - entry) / distance * res['risk']:,.2f} {cur}.")
+
+    tags = st.multiselect("Why (pick 1-3)", config.JOURNAL_TAGS, max_selections=3, key="log_tags")
+    note = st.text_input("Note (optional)", key="log_note")
+    ready = bool(tags) and tp is not None
+    b1, b2 = st.columns(2)
+    take = b1.button("Log trade", type="primary", disabled=not ready or res["lots"] == 0, width="stretch")
+    skip = b2.button("Log as skipped", disabled=not ready, width="stretch",
+                     help="A setup you looked at but didn't take. Its outcome is worked out later.")
+    if not tags:
+        st.caption("Pick at least one reason to enable logging.")
+
+    if take or skip:
+        now = pd.Timestamp.now(tz="UTC")
+        signature = (name, side, round(entry, dec), round(stop, dec), bool(take))
+        recent_logs = {sig: ts for sig, ts in st.session_state.get("_recent_logs", {}).items()
+                       if (now - ts).total_seconds() < 60}
+        if signature in recent_logs:
+            st.warning("This exact trade was logged less than a minute ago, so it was not logged again.")
+        else:
+            breakout = currency.pair_breakouts(history[name], config.RECORD_LOOKBACK_BARS,
+                                               config.RECORD_WINDOW_BARS).iloc[-1]
+            snapshot = journal.build_snapshot(name, vendor, history[name], now,
+                                              journal.currency_snapshot(history, smap), dist, entry, atr_day,
+                                              breakout)
+            row = journal.clean({
+                "status": "open" if take else "skipped",
+                "entry_time": now.isoformat(),
+                "pair": name, "side": side, "entry": entry, "sl": stop, "tp": tp, "tp_choice": tp_choice,
+                "lots": res["lots"] if take else None,
+                "balance": balance, "risk_pct": risk_pct,
+                "risk_money": res["risk"] if take else risk_money,
+                "stop_method": mode, "stop_band": stop_label,
+                "tags": list(tags), "note": note or None, "snapshot": snapshot,
+            })
+            try:
+                trade_id = log.add(row)
+            except tradelog.TradeLogError as e:
+                st.error(f"Not logged: {e}")
+            else:
+                st.session_state["_recent_logs"] = {**recent_logs, signature: now}
+                st.session_state["_log_msg"] = (
+                    f"Logged {'trade' if take else 'skipped setup'}: {name} {side} at {entry:.{dec}f} "
+                    f"(id {trade_id[:8]}). Close it on the Trade log page." if take else
+                    f"Logged skipped setup: {name} {side} at {entry:.{dec}f} (id {trade_id[:8]})."
+                )
+                st.session_state["_clear_log_inputs"] = True
+                st.rerun()

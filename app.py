@@ -9,6 +9,7 @@ nav = st.navigation(
         st.Page("pages/symbol.py", title="Symbol"),
         st.Page("pages/currency.py", title="Currencies"),
         st.Page("pages/risk.py", title="Risk calculator"),
+        st.Page("pages/journal.py", title="Trade log"),
     ]
 )
 nav.run()

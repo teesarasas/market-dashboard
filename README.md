@@ -47,7 +47,10 @@ To test the UI without spending API credits, set `DATA_PROVIDER = "demo"` in `co
 - `indicators/risk.py` — position sizing, ATR-scaled distribution bands, R targets (reusable by the robot)
 - `indicators/metrics.py` — metrics available on the Market map axes
 - `indicators/snapshot.py` — latest values per symbol
-- `pages/` — Overview, Market map, Symbol, Currencies, Risk calculator
+- `indicators/journal.py` — trade-log snapshot and results (pure)
+- `data/tradelog.py` — trade-log storage: Supabase (REST) or a demo CSV file
+- `sql/trades.sql` — the Supabase table
+- `pages/` — Overview, Market map, Symbol, Currencies, Risk calculator, Trade log
 - `tests/` — run with `python -m pytest` (install `requirements-dev.txt` first)
 
 ## API usage
@@ -58,3 +61,22 @@ since only the Currencies page uses them. Default: 29 x 2 + 7 x 1 = 65 credits p
 The Risk calculator also fetches 1h bars once per trading day for the distribution bands
 (29 credits a day). Data is cached for 10 minutes,
 so reloading the page doesn't spend credits. "Refresh data" forces a new fetch.
+
+## Trade log (Supabase)
+
+"Log trade" on the Risk calculator saves the trade plus every dashboard value at that moment;
+the Trade log page closes it. In demo mode it writes to `trade_log_demo.csv` instead.
+
+1. Create a free project at supabase.com.
+2. SQL Editor > New query: paste `sql/trades.sql` and Run.
+3. Settings > API Keys: copy the Project URL and create a **Secret key** (`sb_secret_...`).
+   Never put the secret key in the repo.
+4. Streamlit Cloud: app > Settings > Secrets, add
+   ```
+   [supabase]
+   url = "https://YOUR-PROJECT.supabase.co"
+   key = "sb_secret_..."
+   ```
+5. Running locally: add `SUPABASE_URL=...` and `SUPABASE_KEY=...` lines to `.env`.
+6. Open the Trade log page: it should say "Stored in Supabase".
+
