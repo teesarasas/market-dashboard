@@ -155,3 +155,9 @@ JOURNAL_TAGS = [
 ]
 DISPLAY_TZ = "Asia/Bangkok"              # times shown on the Trade log page
 SESSIONS = [(0, "Asia"), (7, "London"), (12, "London/NY overlap"), (16, "New York"), (21, "Late")]  # UTC start hour
+
+# --- Overview setup filter ---
+SETUP_ADX_MIN = 25
+SETUP_DI_MIN = 20          # DI spread at least +20 for Trend up, at most -20 for Trend down
+SETUP_ADR_MAX = 50         # ADR used % must be below this
+SETUP_DEFAULT_ON = ["adx", "di", "trend"]   # ticked by default; "adr" and "pdhl" start unticked

@@ -2,6 +2,7 @@ import streamlit as st
 
 import config
 import ui
+from indicators import screen
 
 history, snap, errors, fetched_at, groups = ui.load()
 
@@ -16,6 +17,25 @@ if snap.empty:
 cols = st.columns(len(ui.STATE_ORDER))
 for col, state in zip(cols, ui.STATE_ORDER):
     col.metric(state, int((snap["State"] == state).sum()))
+
+# Setup filter: each condition can be switched on or off
+with st.container(border=True):
+    on = st.toggle("Setup filter", value=True, key="setup_on",
+                   help="Show only instruments that pass every ticked condition.")
+    boxes = st.columns(len(screen.CONDITIONS))
+    selected = [
+        key for box, (key, label) in zip(boxes, screen.CONDITIONS.items())
+        if box.checkbox(label, value=key in config.SETUP_DEFAULT_ON, key=f"setup_{key}", disabled=not on)
+    ]
+    total = len(snap)
+    if on:
+        snap = snap[screen.setup_mask(snap, selected)]
+        st.caption(f"Showing {len(snap)} of {total} instruments"
+                   + ("" if selected else " (no condition ticked)") + ". "
+                   "\"With the trend\" follows the State: up for Trend up, down for Trend down.")
+if snap.empty:
+    st.info("No instrument passes all the ticked conditions right now. Untick one to widen the filter.")
+    st.stop()
 
 c1, c2 = st.columns([1, 1])
 sort_by = c1.radio(
@@ -99,5 +119,7 @@ st.caption(
     "Conflict: ADX trending but EMA side and DI spread do not clearly agree. Stale: market closed or no recent bars.  \n"
     f"NATR: ATR as % of price. ADR used: today's range vs the {config.ADR_DAYS}-day average "
     f"(amber at {config.ADR_USED_WARN}%+). Prev-day pos: 0% = previous day's low, 100% = its high. "
-    f"EMA lag: price crossed EMA{config.EMA_LENGTH} but the EMA still slopes the other way."
+    f"EMA lag: price crossed EMA{config.EMA_LENGTH} but the EMA still slopes the other way.  \n"
+    "Setup filter: the State counts above always cover every instrument. \"Beyond yesterday's high / low\" "
+    "means Prev-day pos above 100% in an uptrend or below 0% in a downtrend."
 )
