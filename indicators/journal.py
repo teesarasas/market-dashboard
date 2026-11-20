@@ -75,6 +75,15 @@ def currency_snapshot(history: dict, smap: dict) -> dict:
     return out
 
 
+def close_problem(reason: str, price, note) -> str | None:
+    """Why a close can't be saved yet, or None. A manual close needs an exit price and a written reason."""
+    if price is None:
+        return "Enter the exit price for a manual close."
+    if reason == "Closed manually" and not (note or "").strip():
+        return "Write why you closed it manually."
+    return None
+
+
 def clean(value):
     """JSON-safe: numpy -> python, NaN/inf -> None, timestamps -> ISO strings."""
     if isinstance(value, dict):
@@ -113,6 +122,9 @@ def build_snapshot(name: str, vendor: str, ind: pd.DataFrame, now: pd.Timestamp,
         "di_spread": last.get("di_spread"),
         "natr": last.get("natr"),
         "ema_lag": last.get("ema_lag"),
+        "ema_h1": last.get("ema_h1"),
+        "h1_side": (None if pd.isna(last.get("ema_h1", np.nan))
+                    else "Above" if last.get("close") > last.get("ema_h1") else "Below"),
         "adr_used": last.get("adr_used"),
         "prev_day_zone": last.get("prev_day_zone"),
         "prev_day_pos": last.get("prev_day_pos"),

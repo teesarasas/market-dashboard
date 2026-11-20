@@ -88,3 +88,25 @@ def test_weak_dominance_becomes_conflict(monkeypatch):
     out = trend.compute(_ohlc(100 + 0.1 * np.arange(400)))
     assert not out["state"].isin([trend.TREND_UP, trend.TREND_DOWN]).any()
     assert (out["state"] == trend.CONFLICT).any()
+
+
+def test_htf_ema_matches_hourly_ema_at_hour_ends_and_is_live_inside():
+    rng = np.random.default_rng(3)
+    close = pd.Series(100 + np.cumsum(rng.normal(0, 0.1, 6 * 200)),
+                      index=pd.date_range("2026-01-05", periods=6 * 200, freq="10min", tz="UTC"))
+    live = trend.htf_ema(close, "1h", 20)
+    hourly = close.resample("1h").last()
+    ema = hourly.ewm(span=20, adjust=False).mean()
+    # last 10m bar of each hour (hh:50) sees the completed hourly EMA
+    ends = close.index[close.index.minute == 50]
+    np.testing.assert_allclose(live[ends].iloc[25:].to_numpy(), ema.iloc[25:].to_numpy())
+    # inside an hour: alpha x current close + (1 - alpha) x previous hour's EMA
+    t = close.index[6 * 100 + 2]                   # hh:20 of hour 100
+    a = 2 / 21
+    assert np.isclose(live[t], a * close[t] + (1 - a) * ema.iloc[99])
+    assert live.iloc[: 6 * 19].isna().all() and live.iloc[6 * 19:].notna().all()   # warm-up: 20 hourly bars
+
+
+def test_compute_adds_h1_ema_without_touching_state():
+    out = trend.compute(_ohlc(100 + 0.1 * np.arange(6 * 130)))
+    assert "ema_h1" in out and out["ema_h1"].iloc[-1] < out["close"].iloc[-1]   # rising market: price above

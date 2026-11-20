@@ -67,23 +67,32 @@ for _, t in open_trades.iterrows():
             c1, c2 = st.columns(2)
             day = c1.date_input("Exit date", value=now_local.date())
             clock = c2.time_input("Exit time", value=now_local.time().replace(second=0, microsecond=0), step=60)
+            exit_note = st.text_area(
+                "Why did you close it? (required for a manual close)",
+                placeholder="e.g. News in 10 minutes · price stalled at P50 for 3 hours · H1 turned against me",
+                height=80,
+            )
             submitted = st.form_submit_button("Close trade", type="primary")
         if submitted:
             if price is None:
                 price = {"TP hit": tp, "SL hit": sl}.get(reason)
             exit_time = pd.Timestamp.combine(day, clock).tz_localize(tz).tz_convert("UTC")
-            if price is None:
-                st.error("Enter the exit price for a manual close.")
+            problem = journal.close_problem(reason, price, exit_note)
+            if problem:
+                st.error(problem)
             elif exit_time < pd.Timestamp(t["entry_time"]).floor("min"):
                 st.error("The exit time is before the entry time.")
             else:
                 r, pnl = journal.trade_result(t["side"], entry, sl, float(price), float(t["risk_money"]))
                 hold = max(0.0, (exit_time - pd.Timestamp(t["entry_time"])).total_seconds() / 60)
+                fields = {
+                    "status": "closed", "exit_time": exit_time.isoformat(), "exit_price": float(price),
+                    "exit_reason": reason, "r_result": r, "pnl": pnl, "hold_minutes": hold,
+                }
+                if (exit_note or "").strip():
+                    fields["exit_note"] = exit_note.strip()   # needs the exit_note column (sql/trades.sql)
                 try:
-                    log.close(t["id"], journal.clean({
-                        "status": "closed", "exit_time": exit_time.isoformat(), "exit_price": float(price),
-                        "exit_reason": reason, "r_result": r, "pnl": pnl, "hold_minutes": hold,
-                    }))
+                    log.close(t["id"], journal.clean(fields))
                 except tradelog.TradeLogError as e:
                     st.error(f"Not saved: {e}")
                 else:
@@ -105,6 +114,7 @@ else:
             "Pair": t["pair"], "Side": t["side"], "Status": t["status"],
             "Why": ", ".join(tags) if isinstance(tags, list) else "",
             "Exit": t.get("exit_reason") if closed else "",
+            "Exit note": t.get("exit_note") if closed and isinstance(t.get("exit_note"), str) else "",
             "R": float(t["r_result"]) if closed and pd.notna(t.get("r_result")) else None,
             f"P&L ({config.ACCOUNT_CURRENCY})": float(t["pnl"]) if closed and pd.notna(t.get("pnl")) else None,
             "Held (h)": float(t["hold_minutes"]) / 60 if closed and pd.notna(t.get("hold_minutes")) else None,

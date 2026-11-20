@@ -159,5 +159,11 @@ SESSIONS = [(0, "Asia"), (7, "London"), (12, "London/NY overlap"), (16, "New Yor
 # --- Overview setup filter ---
 SETUP_ADX_MIN = 25
 SETUP_DI_MIN = 20          # DI spread at least +20 for Trend up, at most -20 for Trend down
-SETUP_ADR_MAX = 50         # ADR used % must be below this
-SETUP_DEFAULT_ON = ["adx", "di", "trend"]   # ticked by default; "adr" and "pdhl" start unticked
+SETUP_ADR_MIN = 50         # ADR used % must be above this (trades at 50-70% did best in the log)
+# Higher-timeframe check: price on the right side of the 1-hour EMA120 for the 10m trend direction.
+# Built from the 10m bars already fetched (no extra API credits). Live, like a TradingView H1 chart.
+H1_RULE = "1h"
+H1_EMA_LENGTH = 120
+# Ticked by default. "adr", "pdhl" and "h1" start unticked: an untested condition switched on by default
+# means you never take the trades it rejects, so the trade log can never show whether it helps.
+SETUP_DEFAULT_ON = ["adx", "di", "trend"]

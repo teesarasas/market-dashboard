@@ -73,6 +73,23 @@ def adx_regime(adx_values: pd.Series) -> pd.Series:
     return pd.Series(out, index=adx_values.index)
 
 
+def htf_ema(close: pd.Series, rule: str, length: int) -> pd.Series:
+    """EMA of a higher timeframe's closes, shown on the lower-timeframe index. Each bar sees the EMA as a
+    live chart of that timeframe would at that moment: the current higher-timeframe bar is still forming
+    and its close is this bar's close. NaN until there are `length` higher-timeframe bars."""
+    hourly = close.resample(rule, label="left", closed="left").last().dropna()
+    ema = hourly.ewm(span=length, adjust=False).mean()
+    prev = ema.shift(1)                                   # EMA up to the previous completed bar
+    bucket = close.index.floor(rule)
+    prev_at = prev.reindex(bucket).to_numpy()
+    count_at = pd.Series(np.arange(1, len(hourly) + 1), index=hourly.index).reindex(bucket).to_numpy()
+    alpha = 2 / (length + 1)
+    live = alpha * close.to_numpy() + (1 - alpha) * prev_at
+    first = hourly.index[0] if len(hourly) else None
+    live = np.where(bucket == first, close.to_numpy(), live)   # very first bar: EMA starts at the close
+    return pd.Series(np.where(count_at >= length, live, np.nan), index=close.index)
+
+
 def compute(df: pd.DataFrame) -> pd.DataFrame:
     """Adds all indicator columns to a 10m OHLC frame."""
     out = df.copy()
@@ -83,6 +100,7 @@ def compute(df: pd.DataFrame) -> pd.DataFrame:
     out["score"] = (out["close"] - out["ema"]) / out["atr"]
     out["natr"] = out["atr"] / out["close"] * 100
     out["regime"] = adx_regime(out["adx"])
+    out["ema_h1"] = htf_ema(out["close"], config.H1_RULE, config.H1_EMA_LENGTH)
 
     # EMA lag: price has crossed the EMA but the EMA still slopes the other way
     out["ema_slope_atr"] = (out["ema"] - out["ema"].shift(config.SLOPE_BARS)) / out["atr"]

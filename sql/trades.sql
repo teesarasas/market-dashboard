@@ -22,10 +22,14 @@ create table if not exists public.trades (
   exit_time     timestamptz,
   exit_price    numeric,
   exit_reason   text,
+  exit_note     text,          -- why a trade was closed (required for a manual close)
   r_result      numeric,
   pnl           numeric,
   hold_minutes  numeric
 );
+
+-- Added 20 Nov 2026. Safe to run on an existing table:
+alter table public.trades add column if not exists exit_note text;
 
 create index if not exists trades_status_idx on public.trades (status, entry_time desc);
 

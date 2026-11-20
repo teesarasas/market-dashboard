@@ -121,5 +121,7 @@ st.caption(
     f"(amber at {config.ADR_USED_WARN}%+). Prev-day pos: 0% = previous day's low, 100% = its high. "
     f"EMA lag: price crossed EMA{config.EMA_LENGTH} but the EMA still slopes the other way.  \n"
     "Setup filter: the State counts above always cover every instrument. \"Beyond yesterday's high / low\" "
-    "means Prev-day pos above 100% in an uptrend or below 0% in a downtrend."
+    "means Prev-day pos above 100% in an uptrend or below 0% in a downtrend. "
+    f"H1 side: price vs the 1-hour EMA{config.H1_EMA_LENGTH}, live (the current hour counts as it forms); "
+    "the H1 filter wants Above in an uptrend and Below in a downtrend."
 )

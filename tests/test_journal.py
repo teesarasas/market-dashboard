@@ -131,3 +131,11 @@ def test_get_log_demo_and_unconfigured(monkeypatch):
     monkeypatch.setenv("SUPABASE_KEY", "sb_secret_xyz")
     log, problem = tradelog.get_log()
     assert isinstance(log, tradelog.SupabaseLog)
+
+
+def test_close_problem_requires_price_and_manual_reason():
+    assert journal.close_problem("TP hit", 1.1, "") is None
+    assert journal.close_problem("Closed manually", None, "x") == "Enter the exit price for a manual close."
+    assert journal.close_problem("Closed manually", 1.1, "   ") == "Write why you closed it manually."
+    assert journal.close_problem("Closed manually", 1.1, None) == "Write why you closed it manually."
+    assert journal.close_problem("Closed manually", 1.1, "News at 21:30") is None

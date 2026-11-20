@@ -23,6 +23,8 @@ def build(bars: dict, symbol_map: dict, now: pd.Timestamp):
                 "Symbol": name,
                 "Price": last["close"],
                 "Side": "Above" if last["close"] > last["ema"] else "Below",
+                "H1 side": (None if pd.isna(last["ema_h1"])
+                            else "Above" if last["close"] > last["ema_h1"] else "Below"),
                 "ADX": last["adx"],
                 "+DI": last["plus_di"],
                 "-DI": last["minus_di"],
