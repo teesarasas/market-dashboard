@@ -49,7 +49,9 @@ To test the UI without spending API credits, set `DATA_PROVIDER = "demo"` in `co
 - `indicators/snapshot.py` — latest values per symbol
 - `indicators/journal.py` — trade-log snapshot and results (pure)
 - `data/tradelog.py` — trade-log storage: Supabase (REST) or a demo CSV file
-- `sql/trades.sql` — the Supabase table
+- `sql/trades.sql` — the Supabase trade table; `sql/signals.sql` — the signal bot's table
+- `indicators/signals.py` — entry signals on closed 10m bars (same conditions as the Overview filter)
+- `bot/` — the Telegram signal bot (`bot/run.py`), its Telegram client and storage
 - `pages/` — Overview, Market map, Symbol, Currencies, Risk calculator, Trade log
 - `tests/` — run with `python -m pytest` (install `requirements-dev.txt` first)
 
@@ -80,3 +82,45 @@ the Trade log page closes it. In demo mode it writes to `trade_log_demo.csv` ins
 5. Running locally: add `SUPABASE_URL=...` and `SUPABASE_KEY=...` lines to `.env`.
 6. Open the Trade log page: it should say "Stored in Supabase".
 
+## Telegram signal bot
+
+Every 10 minutes the bot checks the last closed 10m bar of the 29 tradable instruments (58 credits per run).
+
+- **Alert** (Telegram): a bar closes with every condition in `SIGNAL_ALERT_CONDITIONS` passing (ADX > 25,
+  DI spread ≥ 20 with the trend, State Trend up/down, ADR used ≥ 50%, H1 price on the trend side of EMA120,
+  Score ≥ 3 with the trend) after they had failed for the previous hour. Enter on the next bar.
+  The Overview's setup filter ticks the same conditions by default.
+- **Setup** (recorded silently in Supabase): ADX, DI spread and Trend pass. Each row stores whether ADR, H1 and
+  Score passed too, so we can later measure whether those conditions earn their place.
+- The alert checks your own limits against the trade log and warns (never blocks): open trades vs
+  `MAX_OPEN_TRADES`, the same pair already open, an open trade that is the same currency bet,
+  trades today vs `MAX_TRADES_PER_DAY`, and today's loss vs `DAILY_LOSS_STOP_PCT` (FTMO day, 17:00 New York).
+- No alerts for bars closing 16:50-18:00 New York (`SIGNAL_ROLLOVER_PAUSE_NY`): spreads blow out at the rollover.
+- Nothing runs while the FX market is closed (Friday 17:00 to Sunday 17:00 New York).
+
+### One-time setup
+
+1. Supabase: run `sql/signals.sql` (SQL Editor > New query > Run).
+2. Telegram: create a new bot with @BotFather and copy its token. Send your new bot any message.
+3. Server: any small Linux server (Ubuntu 24.04, smallest plan, Singapore region is fine).
+   ```
+   sudo apt update && sudo apt install -y python3-venv git
+   ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N ""      # then add ~/.ssh/id_ed25519.pub to the GitHub repo:
+                                                          # Settings > Deploy keys > Add (read-only)
+   git clone git@github.com:teesarasas/market-dashboard.git
+   cd market-dashboard
+   python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+   nano .env        # TWELVEDATA_API_KEY=...  SUPABASE_URL=...  SUPABASE_KEY=...  TELEGRAM_BOT_TOKEN=...
+   chmod 600 .env
+   .venv/bin/python -m bot.run --chat-id     # prints your chat id; add TELEGRAM_CHAT_ID=... to .env
+   .venv/bin/python -m bot.run --test        # a test message should arrive in Telegram
+   .venv/bin/python -m bot.run --dry-run     # prints what it would send; sends and stores nothing
+   ```
+4. Schedule it (server clock is UTC; runs at :01, :11, :21 ... one minute after each 10m bar closes):
+   ```
+   crontab -e
+   1-59/10 * * * * cd ~/market-dashboard && .venv/bin/python -m bot.run >> ~/signals.log 2>&1
+   ```
+5. After you push changes: `cd ~/market-dashboard && git pull`.
+
+The `.env` on the server is separate from your PC's and is never committed.

@@ -10,9 +10,10 @@ CONDITIONS = {
     "adx": f"ADX > {config.SETUP_ADX_MIN}",
     "di": f"DI spread ≥ {config.SETUP_DI_MIN} with the trend",
     "trend": "State is Trend up / down",
-    "adr": f"ADR used > {config.SETUP_ADR_MIN}%",
+    "adr": f"ADR used ≥ {config.SETUP_ADR_MIN}%",
     "pdhl": "Beyond yesterday's high / low with the trend",
     "h1": f"H1 price on the trend side of EMA{config.H1_EMA_LENGTH}",
+    "score": f"Score ≥ {config.SETUP_SCORE_MIN} with the trend",
 }
 
 
@@ -30,9 +31,10 @@ def checks(snap: pd.DataFrame) -> pd.DataFrame:
         "adx": snap["ADX"] > config.SETUP_ADX_MIN,
         "di": d * snap["DI spread"] >= config.SETUP_DI_MIN,
         "trend": snap["State"].isin([trend.TREND_UP, trend.TREND_DOWN]),
-        "adr": snap["ADR used %"] > config.SETUP_ADR_MIN,
+        "adr": snap["ADR used %"] >= config.SETUP_ADR_MIN,
         "pdhl": ((d > 0) & (pos > 100)) | ((d < 0) & (pos < 0)),
         "h1": ((d > 0) & (snap["H1 side"] == "Above")) | ((d < 0) & (snap["H1 side"] == "Below")),
+        "score": d * snap["Score"] >= config.SETUP_SCORE_MIN,
     }, index=snap.index).fillna(False).astype(bool)
 
 

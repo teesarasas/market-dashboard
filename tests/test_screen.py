@@ -8,6 +8,7 @@ def snap(rows):
     cols = ["Symbol", "State", "ADX", "DI spread", "ADR used %", "Prev-day pos %"]
     df = pd.DataFrame(rows, columns=cols)
     df["H1 side"] = np.where(df["DI spread"] > 0, "Above", "Below")   # H1 agrees with the DI direction
+    df["Score"] = np.sign(df["DI spread"]) * 4                         # Score agrees too
     return df
 
 
@@ -59,8 +60,15 @@ def test_adr_above_and_h1_side():
         "State": ["Trend up", "Trend up", "Trend down", "Trend down", "Trend up"],
         "ADX": [32] * 5, "DI spread": [35, 35, -35, -35, 35],
         "ADR used %": [60, 40, 51, 50, 70], "Prev-day pos %": [50] * 5,
-        "H1 side": ["Above", "Below", "Below", "Above", None],
+        "H1 side": ["Above", "Below", "Below", "Above", None], "Score": [4, 4, -4, -4, 4],
     })
     got = lambda sel: list(s.loc[screen.setup_mask(s, sel), "Symbol"])
-    assert got(["adr"]) == ["UP_ABOVE", "DOWN_BELOW", "NO_H1"]        # strictly above 50%
+    assert got(["adr"]) == ["UP_ABOVE", "DOWN_BELOW", "DOWN_ABOVE", "NO_H1"]   # 50% itself passes
     assert got(["h1"]) == ["UP_ABOVE", "DOWN_BELOW"]                  # missing H1 fails
+
+
+def test_score_with_the_trend():
+    s = pd.DataFrame({"Symbol": ["UP3", "UP2", "DOWN3", "DOWN_POS"], "State": ["Trend up", "Trend up", "Trend down", "Trend down"],
+                      "ADX": 30, "DI spread": [30, 30, -30, -30], "ADR used %": 60, "Prev-day pos %": 50,
+                      "H1 side": None, "Score": [3.0, 2.9, -3.2, 3.5]})
+    assert list(s.loc[screen.setup_mask(s, ["score"]), "Symbol"]) == ["UP3", "DOWN3"]

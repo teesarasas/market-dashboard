@@ -159,11 +159,30 @@ SESSIONS = [(0, "Asia"), (7, "London"), (12, "London/NY overlap"), (16, "New Yor
 # --- Overview setup filter ---
 SETUP_ADX_MIN = 25
 SETUP_DI_MIN = 20          # DI spread at least +20 for Trend up, at most -20 for Trend down
-SETUP_ADR_MIN = 50         # ADR used % must be above this (trades at 50-70% did best in the log)
+SETUP_ADR_MIN = 50         # ADR used % must be at least this (trades at 50-70% did best in the log)
+SETUP_SCORE_MIN = 3        # Score at least +3 ATR for Trend up, at most -3 for Trend down
 # Higher-timeframe check: price on the right side of the 1-hour EMA120 for the 10m trend direction.
 # Built from the 10m bars already fetched (no extra API credits). Live, like a TradingView H1 chart.
 H1_RULE = "1h"
 H1_EMA_LENGTH = 120
-# Ticked by default. "adr", "pdhl" and "h1" start unticked: an untested condition switched on by default
-# means you never take the trades it rejects, so the trade log can never show whether it helps.
-SETUP_DEFAULT_ON = ["adx", "di", "trend"]
+# Ticked by default: the same conditions as the Telegram alert, so the Overview and the bot agree.
+# The bot still records every ADX + DI + Trend setup with each extra condition's result, so the extra
+# conditions can be tested later even though you only trade the full signal.
+SETUP_DEFAULT_ON = ["adx", "di", "trend", "adr", "h1", "score"]
+
+# --- Signal bot (bot/run.py, runs every 10 minutes on a server) ---
+SIGNAL_GROUPS = ["FX majors", "FX crosses", "Metals"]   # 29 instruments x 2 pages = 58 credits per run
+SIGNAL_ALERT_CONDITIONS = ["adx", "di", "trend", "adr", "h1", "score"]   # all pass on a closed bar -> Telegram
+SIGNAL_RECORD_CONDITIONS = ["adx", "di", "trend"]   # passing these is recorded silently ("setup"), for testing
+SIGNAL_COOLDOWN_BARS = 6       # a new signal needs the conditions to have failed for the 6 bars (1h) before
+SIGNAL_LOOKBACK_BARS = 2       # check the last 2 closed bars, so one missed run doesn't lose a signal
+SIGNAL_MAX_BAR_AGE_MIN = 25    # ignore a symbol whose last closed bar is older (market closed, data late)
+SIGNAL_QUIET_HOURS = None      # e.g. (1, 7): no Telegram from 01:00 to 07:00 DISPLAY_TZ (still recorded)
+SIGNAL_TABLE = "signals"       # Supabase table (sql/signals.sql)
+SIGNAL_DEMO_FILE = "signals_demo.csv"
+MAX_OPEN_TRADES = 2            # the alert warns when you're already at this many open trades
+MAX_TRADES_PER_DAY = 4         # ... when you've already entered this many today (FTMO day: 17:00 New York)
+DAILY_LOSS_STOP_PCT = 1.0      # ... when today's closed trades have lost this % of the balance
+# No alerts for bars closing in this New York window: spreads blow out around the 17:00 rollover and gold
+# is closed 17:00-18:00. Signals there are still recorded.
+SIGNAL_ROLLOVER_PAUSE_NY = ("16:50", "18:00")
