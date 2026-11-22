@@ -50,7 +50,12 @@ def symbol_map():
 
 @st.cache_data(ttl=config.CACHE_TTL_SECONDS, show_spinner="Fetching market data…")
 def load_all(provider_name: str):
-    """Returns (bars: {display: 10m DataFrame}, errors: {display: msg}, fetched_at)."""
+    """Returns (bars: {display: 10m DataFrame}, errors: {display: msg}, fetched_at). Cached for the dashboard."""
+    return fetch_10m(provider_name)
+
+
+def fetch_10m(provider_name: str, groups=None):
+    """Uncached fetch of 10m bars (the signal bot calls this directly). groups=None means every group."""
     provider = PROVIDERS[provider_name]
     api_key = get_api_key() if provider_name == "twelvedata" else None
     if provider_name == "twelvedata" and not api_key:
@@ -58,7 +63,7 @@ def load_all(provider_name: str):
             "No API key found. Add TWELVEDATA_API_KEY to your .env file."
         )
 
-    smap = symbol_map()
+    smap = {n: gv for n, gv in symbol_map().items() if groups is None or gv[0] in groups}
     vendor_to_display = {v: name for name, (_, v) in smap.items()}
 
     # Symbols grouped by how many pages of history they need
